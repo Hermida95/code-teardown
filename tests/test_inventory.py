@@ -220,3 +220,12 @@ def test_sql_built_in_a_variable_is_flagged(tmp_path):
         "def prose(n):\n    return f\"We will select from {n} options\"\n")
     found = sorted(s["line"] for s in signals(inventory(str(tmp_path)), "sql_string_building"))
     assert found == [2, 5, 7]          # no duplicates, no hit on parametrized SQL or ordinary prose
+
+
+def test_lint_and_type_tools_found_in_setup_cfg_and_tox(tmp_path):
+    (tmp_path / "setup.cfg").write_text("[mypy]\nignore_missing_imports = True\n")
+    (tmp_path / "tox.ini").write_text("[testenv:format]\ncommands = black --check .\n")
+    (tmp_path / "notes.ini").write_text("mypy is mentioned here but this is not a tool config\n")
+    (tmp_path / "a.py").write_text("x = 1\n")
+    found = inventory(str(tmp_path))["project_signals"]["lint_or_type_config"]
+    assert found == ["setup.cfg", "tox.ini"]

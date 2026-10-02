@@ -505,6 +505,10 @@ def inventory(root_arg: str, max_files: int = 20000, full: bool = False) -> dict
             ci_files.append(rel)
         if lowered in (".flake8", ".pre-commit-config.yaml", "ruff.toml", ".ruff.toml", "mypy.ini", ".pylintrc", ".eslintrc", ".eslintrc.json"):
             lint_files.append(rel)
+        if lowered in ("setup.cfg", "tox.ini"):
+            body = read_text(path) or ""
+            if re.search(r"^\[(mypy|flake8|pylint|isort)|\b(mypy|black|flake8|ruff|pylint)\b", body, re.M):
+                lint_files.append(rel)
         if lowered in ("poetry.lock", "pipfile.lock", "package-lock.json", "yarn.lock", "uv.lock", "pnpm-lock.yaml", "go.sum", "cargo.lock"):
             lock_files.append(rel)
         if lowered.startswith(("license", "copying")):
