@@ -277,6 +277,10 @@ class Scanner:
         self.layers[layer]["wasted_bytes"] += size
         label = is_sensitive(path)
         if label and size:
+            # It is no longer in the final filesystem: replace the "present" signal with the
+            # more precise "deleted but recoverable" one.
+            self.signals = [s for s in self.signals
+                            if not (s["kind"] == "sensitive_file" and s["path"] == path and s["ref"] == f"layer {layer}")]
             self.signals.append({
                 "kind": "deleted_secret_still_in_layer", "ref": f"layer {layer}", "path": path,
                 "detail": f"{label} was removed in layer {by_layer} but its content remains in layer {layer} "

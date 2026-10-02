@@ -106,6 +106,7 @@ def test_deleted_secret_still_in_earlier_layer(tmp_path):
     assert signal["ref"] == "layer 0" and signal["path"] == "app/.env"
     assert report["layers"][0]["wasted_bytes"] == len("SECRET=1\n")
     assert report["layers"][1]["whiteouts"] == 1
+    assert "sensitive_file" not in kinds(report)       # gone from the final image: only the precise signal remains
 
 
 def test_secret_present_in_final_image(tmp_path):
