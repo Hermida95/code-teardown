@@ -106,3 +106,22 @@ def test_context_matrix_is_complete_and_valid():
 @pytest.mark.parametrize("path", REFERENCES, ids=lambda p: p.name)
 def test_reference_mentions_no_machine_paths(path):
     assert "/Users/" not in path.read_text(encoding="utf-8")
+
+
+def test_readme_local_links_and_images_exist():
+    for readme in (ROOT / "README.md", ROOT / "evals" / "README.md"):
+        text = readme.read_text(encoding="utf-8")
+        targets = re.findall(r"\]\(([^)#\s]+)(?:#[^)]*)?\)", text)
+        for target in targets:
+            if target.startswith(("http://", "https://")):
+                continue
+            assert (readme.parent / target).exists(), f"{readme.name}: broken link {target}"
+
+
+def test_readme_documented_commands_match_the_plugin_name():
+    import json
+    manifest = json.loads((ROOT / ".claude-plugin" / "plugin.json").read_text())
+    market = json.loads((ROOT / ".claude-plugin" / "marketplace.json").read_text())
+    readme = (ROOT / "README.md").read_text()
+    assert manifest["name"] == market["plugins"][0]["name"] == "code-teardown"
+    assert f"claude plugin install {manifest['name']}@{market['name']}" in readme

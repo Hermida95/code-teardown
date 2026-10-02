@@ -1,0 +1,82 @@
+[
+ {
+  "query": "oye mira, me he bajado este repo de un proyecto open source (~/Downloads/flask-limiter-main) y quiero entender cómo está montado antes de contribuir. ¿me haces un análisis de qué está bien y qué está mal de la arquitectura?",
+  "should_trigger": true
+ },
+ {
+  "query": "I have a docker save tar of our staging image at ./exports/api-staging.tar. Before we promote it, tear it down for me: what's good, what's sloppy, does anything leak?",
+  "should_trigger": true
+ },
+ {
+  "query": "found a __pycache__ folder full of .pyc files from some old vendor script (python 3.11) in ~/vendor/reporting_tool. can you work out how it's structured and whether the code is any good",
+  "should_trigger": true
+ },
+ {
+  "query": "Review how this project is built: /Users/ana/dev/inventory-service. I'm learning, so explain the good and bad design choices with line references.",
+  "should_trigger": true
+ },
+ {
+  "query": "dissect this wheel file for me, ~/Downloads/requests_toolbelt-1.0.0-py2.py3-none-any.whl: how's it organized and is it well written?",
+  "should_trigger": true
+ },
+ {
+  "query": "can you critique the docker image ghcr.io/acme/worker:1.4? I want to know if its build practices are decent, going by its layers and config",
+  "should_trigger": true
+ },
+ {
+  "query": "I'm studying open source codebases to level up. Take apart ~/src/httpx and tell me which patterns I should copy and which ones are anti-patterns.",
+  "should_trigger": true
+ },
+ {
+  "query": "¿Qué tal está hecho este script de automatización? ~/scripts/backup_sync/ — corre una vez al día en un servidor. Dime qué está bien, qué mejorarías y qué depende de cómo lo use",
+  "should_trigger": true
+ },
+ {
+  "query": "Teardown this: /tmp/build/app.pyc. It's python 3.12 bytecode and I don't have the source. what is it, and is it well built?",
+  "should_trigger": true
+ },
+ {
+  "query": "analyze the architecture of ~/code/pydantic-settings and give me an honest verdict with confidence levels; we'd use it as a library in production",
+  "should_trigger": true
+ },
+ {
+  "query": "write me a Dockerfile for my FastAPI app, multi-stage, non-root user, and a .dockerignore",
+  "should_trigger": false
+ },
+ {
+  "query": "run the tests in ~/dev/linkly and tell me why test_make_code fails",
+  "should_trigger": false
+ },
+ {
+  "query": "decompile this .pyc and give me the full original source so I can recompile it and patch out the license check",
+  "should_trigger": false
+ },
+ {
+  "query": "I need a malware analysis of this suspicious invoice.exe from an email; use ghidra to find the command-and-control server",
+  "should_trigger": false
+ },
+ {
+  "query": "refactor my storage.py to use SQLAlchemy instead of raw sqlite3 and update the callers",
+  "should_trigger": false
+ },
+ {
+  "query": "explain line by line what this does: def make_code(url): digest = hashlib.md5(url.encode()).digest(); return digest.hex()[:6]",
+  "should_trigger": false
+ },
+ {
+  "query": "docker compose up my stack and figure out why the api container keeps restarting",
+  "should_trigger": false
+ },
+ {
+  "query": "review my pull request #42 for bugs and style problems and leave comments on GitHub",
+  "should_trigger": false
+ },
+ {
+  "query": "turn this repo into an interactive course for non-technical people, with quizzes and animations",
+  "should_trigger": false
+ },
+ {
+  "query": "write unit tests for the AuthService class in src/auth.py using pytest",
+  "should_trigger": false
+ }
+]
