@@ -1,0 +1,599 @@
+{
+ "meta": {
+  "title": "Teardown of dbader/schedule",
+  "language": "en",
+  "generated": "2026-10-02",
+  "artifact": {
+   "path": "schedule/ (github.com/dbader/schedule @ 82a43db, MIT)",
+   "kind": "source_dir"
+  },
+  "context": {
+   "id": "learning",
+   "label": "Studying a well-known open-source library",
+   "asked": false,
+   "assumed_reason": "This example report was produced without a user to ask, so the skill's non-interactive default (learning) applies."
+  }
+ },
+ "confidence": {
+  "overall": "medium",
+  "explanation": "Real source. I read the library module (schedule/__init__.py, all 945 lines) in full; the tests, docs and CI workflow were only sampled, so testability claims rest on metrics and a few spot reads. Nothing was executed.",
+  "degradations": [
+   "Tests (1,399 lines) read only at the helper and class-header level.",
+   "docs/ and .github/workflows/ci.yml not read."
+  ]
+ },
+ "summary": {
+  "headline": "A small, readable scheduler with a clever API and a few rough edges",
+  "verdict": "The library is easy to learn from: two clear classes, a thin facade, no dependencies and a large test suite. The weak spots are concentrated in Job (too many responsibilities, copy-pasted weekday properties, state-changing properties), in what happens when a job raises, and in a few small details such as an unformatted error message."
+ },
+ "architecture": {
+  "system": "An in-process scheduler for periodic jobs configured through a fluent builder: schedule.every(10).minutes.do(job). The whole library is one 945-line module; the caller drives it by calling run_pending() in a loop.",
+  "components": [
+   {
+    "name": "Scheduler",
+    "role": "Keeps the list of jobs and runs the ones that are due",
+    "modules": [
+     "schedule.Scheduler"
+    ],
+    "evidence": [
+     {
+      "ref": "schedule/__init__.py:79",
+      "quote": "class Scheduler:"
+     }
+    ]
+   },
+   {
+    "name": "Job",
+    "role": "One job's configuration (unit, interval, time of day, timezone, tags) and its next-run computation",
+    "modules": [
+     "schedule.Job"
+    ],
+    "evidence": [
+     {
+      "ref": "schedule/__init__.py:209",
+      "quote": "class Job:"
+     }
+    ]
+   },
+   {
+    "name": "Module facade",
+    "role": "A default Scheduler plus one-line functions such as every() and run_pending()",
+    "modules": [
+     "schedule.default_scheduler"
+    ],
+    "evidence": [
+     {
+      "ref": "schedule/__init__.py:837",
+      "quote": "default_scheduler = Scheduler()"
+     }
+    ]
+   },
+   {
+    "name": "Errors and CancelJob",
+    "role": "Exception hierarchy and the sentinel a job returns to unschedule itself",
+    "modules": [
+     "schedule.ScheduleError",
+     "schedule.CancelJob"
+    ],
+    "evidence": [
+     {
+      "ref": "schedule/__init__.py:53",
+      "quote": "class ScheduleError(Exception):"
+     },
+     {
+      "ref": "schedule/__init__.py:71",
+      "quote": "class CancelJob:"
+     }
+    ]
+   },
+   {
+    "name": "Weekday helpers",
+    "role": "Move a datetime to the next requested weekday",
+    "modules": [
+     "schedule._move_to_next_weekday"
+    ],
+    "evidence": [
+     {
+      "ref": "schedule/__init__.py:916",
+      "quote": "def _move_to_next_weekday("
+     }
+    ]
+   }
+  ],
+  "key_functions": [
+   {
+    "name": "Scheduler.run_pending",
+    "role": "Runs every due job, soonest first",
+    "evidence": [
+     {
+      "ref": "schedule/__init__.py:89-101",
+      "quote": "def run_pending(self) -> None:"
+     }
+    ]
+   },
+   {
+    "name": "Job.do",
+    "role": "Binds the callable, computes the first run and registers the job",
+    "evidence": [
+     {
+      "ref": "schedule/__init__.py:644-664",
+      "quote": "def do(self, job_func: Callable, *args, **kwargs):"
+     }
+    ]
+   },
+   {
+    "name": "Job.run",
+    "role": "Executes the job, reschedules it and honours until()",
+    "evidence": [
+     {
+      "ref": "schedule/__init__.py:674-698",
+      "quote": "def run(self):"
+     }
+    ]
+   },
+   {
+    "name": "Job._schedule_next_run",
+    "role": "The core algorithm: interval, weekday, at-time and timezone to the next datetime",
+    "evidence": [
+     {
+      "ref": "schedule/__init__.py:700-748",
+      "quote": "def _schedule_next_run(self) -> None:"
+     }
+    ]
+   },
+   {
+    "name": "Job.at",
+    "role": "Parses and validates the time-of-day string (the most complex function, 89 lines)",
+    "evidence": [
+     {
+      "ref": "schedule/__init__.py:471-559",
+      "quote": "def at(self, time_str: str, tz: Optional[str] = None):"
+     }
+    ]
+   },
+   {
+    "name": "Job._correct_utc_offset",
+    "role": "Keeps the wall-clock time stable across daylight-saving changes",
+    "evidence": [
+     {
+      "ref": "schedule/__init__.py:773-817",
+      "quote": "def _correct_utc_offset("
+     }
+    ]
+   }
+  ]
+ },
+ "inventory": [
+  {
+   "label": "Python files",
+   "value": "4 (library module 768 non-blank lines; tests 1,399)"
+  },
+  {
+   "label": "Functions (non-test)",
+   "value": "58; mean length 13.1 lines, longest 89 (Job.at)"
+  },
+  {
+   "label": "Complexity",
+   "value": "mean 2.7, max 25 (Job.at)"
+  },
+  {
+   "label": "Type annotations / docstrings",
+   "value": "57% / 52% of functions"
+  },
+  {
+   "label": "Runtime dependencies",
+   "value": "none (pytz optional)"
+  },
+  {
+   "label": "Test functions",
+   "value": "81 in one module"
+  },
+  {
+   "label": "Tooling",
+   "value": "tox.ini, setup.cfg (mypy), black, CI workflow present"
+  },
+  {
+   "label": "Import graph",
+   "value": "1 internal edge, no cycles"
+  }
+ ],
+ "context_weights": {
+  "rationale": "Learning context: the reader wants to understand the design and take ideas away, so clarity of structure weighs most. Error handling, security, testability and coupling matter moderately, and performance little.",
+  "separation_of_concerns": "high",
+  "error_handling": "medium",
+  "security": "medium",
+  "testability": "medium",
+  "coupling": "medium",
+  "performance": "low"
+ },
+ "axes": [
+  {
+   "id": "separation_of_concerns",
+   "summary": "The two-class split is clear and the public facade is thin, but Job carries too many jobs of its own.",
+   "findings": [
+    {
+     "id": "scheduler-job-split",
+     "title": "Scheduler and Job have distinct, nameable roles",
+     "verdict": "good",
+     "confidence": "high",
+     "detail": "Scheduler keeps the registry of jobs and decides what runs; Job holds one job's configuration and next-run arithmetic. Neither class needs the other's internals to explain itself.",
+     "evidence": [
+      {
+       "ref": "schedule/__init__.py:79",
+       "quote": "class Scheduler:"
+      },
+      {
+       "ref": "schedule/__init__.py:209",
+       "quote": "class Job:"
+      }
+     ]
+    },
+    {
+     "id": "thin-module-facade",
+     "title": "The module-level API is a one-line delegation layer",
+     "verdict": "good",
+     "confidence": "high",
+     "detail": "Functions such as every() and run_pending() only forward to one default Scheduler, so the convenient API adds no logic of its own.",
+     "evidence": [
+      {
+       "ref": "schedule/__init__.py:843-847",
+       "quote": "return default_scheduler.every(interval)"
+      }
+     ]
+    },
+    {
+     "id": "job-does-too-much",
+     "title": "Job mixes the fluent DSL, time-string parsing, timezone maths and execution",
+     "verdict": "improvable",
+     "confidence": "medium",
+     "detail": "Job has 33 methods. at() alone is 89 lines with cyclomatic complexity 25 (validation, timezone resolution and parsing in one body), and the DST correction in _correct_utc_offset is also here. Extracting the time parsing and the timezone logic would make each piece testable on its own.",
+     "evidence": [
+      {
+       "ref": "schedule/__init__.py:471-559",
+       "quote": "def at(self, time_str: str, tz: Optional[str] = None):"
+      },
+      {
+       "ref": "schedule/__init__.py:773-817",
+       "quote": "def _correct_utc_offset("
+      },
+      {
+       "ref": "schedule/__init__.py:674",
+       "quote": "def run(self):"
+      }
+     ],
+     "why_it_matters": "The hardest code in the library (DST handling) lives inside the class a user must also read to learn the API.",
+     "recommendation": "Move time-string parsing and timezone arithmetic into small helper functions or a helper class that Job calls."
+    }
+   ]
+  },
+  {
+   "id": "error_handling",
+   "summary": "Configuration errors are excellent; what happens when a job itself fails is left to the caller, and one message is broken.",
+   "findings": [
+    {
+     "id": "exception-hierarchy-and-early-errors",
+     "title": "A small exception hierarchy and errors raised at configuration time",
+     "verdict": "good",
+     "confidence": "high",
+     "detail": "ScheduleError is the base class, with ScheduleValueError and IntervalError below it. Misuse such as every(2).second fails immediately, with a message that tells the caller what to write instead.",
+     "evidence": [
+      {
+       "ref": "schedule/__init__.py:59",
+       "quote": "class ScheduleValueError(ScheduleError):"
+      },
+      {
+       "ref": "schedule/__init__.py:328",
+       "quote": "raise IntervalError(\"Use seconds instead of second\")"
+      }
+     ]
+    },
+    {
+     "id": "job-exceptions-propagate",
+     "title": "An exception inside a job escapes run_pending and the job is not rescheduled",
+     "verdict": "depends",
+     "confidence": "medium",
+     "detail": "Job.run() calls the job function with no try/except. If it raises, the lines that set last_run and compute the next run are never reached, and the exception leaves run_pending() so later jobs in that pass do not run. From reading the code, the failed job still looks due on the next pass.",
+     "evidence": [
+      {
+       "ref": "schedule/__init__.py:691",
+       "quote": "ret = self.job_func()"
+      },
+      {
+       "ref": "schedule/__init__.py:692-693",
+       "quote": "self._schedule_next_run()"
+      },
+      {
+       "ref": "schedule/__init__.py:99-101",
+       "quote": "for job in sorted(runnable_jobs):"
+      }
+     ],
+     "depends_on": "Whether the caller wraps run_pending() or the job function in its own error handling, and what a failed run should mean for the business.",
+     "context_note": "Not hiding errors is a defensible library choice. For a learner it is the thing to notice: a scheduler loop that calls run_pending() unguarded stops at the first failing job, so production code usually adds its own handler.",
+     "recommendation": "Wrap each job function (or run_pending) with logging and an explicit policy for retry or skip."
+    },
+    {
+     "id": "hours-message-never-formatted",
+     "title": "The 'invalid hours' error prints a literal {}",
+     "verdict": "bad",
+     "confidence": "high",
+     "detail": "The message string contains a {} placeholder but is never formatted, so the user sees 'Invalid number of hours ({} is not between 0 and 23)'. The check is reachable, because the regex above it accepts hours from 00 to 29. A search of the test file found no test that asserts this message.",
+     "evidence": [
+      {
+       "ref": "schedule/__init__.py:546-549",
+       "quote": "\"Invalid number of hours ({} is not between 0 and 23)\""
+      },
+      {
+       "ref": "schedule/__init__.py:513",
+       "quote": "[0-2]\\d"
+      },
+      "cmd: grep -n 'not between 0 and 23' test_schedule.py (no matches)"
+     ],
+     "why_it_matters": "A misleading error message is the one place a user needs the number the library is complaining about.",
+     "recommendation": "Format the value into the message, and add a test for the message text."
+    },
+    {
+     "id": "assert-as-precondition",
+     "title": "A runtime precondition is an assert",
+     "verdict": "improvable",
+     "confidence": "medium",
+     "detail": "should_run relies on an assert to check that the next run has been computed. Asserts are removed when Python runs with -O, and failing one raises a bare AssertionError instead of a library error.",
+     "evidence": [
+      {
+       "ref": "schedule/__init__.py:671",
+       "quote": "assert self.next_run is not None, \"must run _schedule_next_run before\""
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "security",
+   "summary": "The attack surface is tiny; the one design point worth knowing is that it runs whatever callable it is given.",
+   "findings": [
+    {
+     "id": "small-attack-surface",
+     "title": "Standard library only: no network, files, subprocesses or dynamic evaluation",
+     "verdict": "good",
+     "confidence": "high",
+     "detail": "The imports are all from the standard library, and the optional pytz is imported lazily only when a timezone is used. The inventory found one risk signal in the whole module, a benign except/pass in a date-parsing helper.",
+     "evidence": [
+      {
+       "ref": "schedule/__init__.py:41-48",
+       "quote": "import datetime"
+      },
+      {
+       "ref": "schedule/__init__.py:499",
+       "quote": "import pytz"
+      },
+      {
+       "ref": "schedule/__init__.py:825-830",
+       "quote": "except ValueError:"
+      }
+     ]
+    },
+    {
+     "id": "runs-callables-in-process",
+     "title": "It executes any callable in-process, with no isolation and no timeout",
+     "verdict": "depends",
+     "confidence": "medium",
+     "detail": "A job is stored as a partial of the callable and invoked directly. That is the whole point of an in-process scheduler, and also the limit: nothing stops a slow or hostile job from blocking every other job.",
+     "evidence": [
+      {
+       "ref": "schedule/__init__.py:655",
+       "quote": "self.job_func = functools.partial(job_func, *args, **kwargs)"
+      },
+      {
+       "ref": "schedule/__init__.py:691",
+       "quote": "ret = self.job_func()"
+      }
+     ],
+     "depends_on": "Where the scheduled callables come from (your own code, or configuration that outsiders can influence) and how long they may run.",
+     "context_note": "Fine as a design for trusted code. Do not treat it as a sandbox or as a worker pool; use separate processes or a task queue if you need isolation or time limits."
+    }
+   ]
+  },
+  {
+   "id": "testability",
+   "summary": "A large suite and enforced tooling, though the code reads the system clock directly.",
+   "findings": [
+    {
+     "id": "large-suite-and-tooling",
+     "title": "81 test functions, CI, and type and format checks defined in tox",
+     "verdict": "good",
+     "confidence": "medium",
+     "detail": "The inventory counts 81 test functions in one test module, and the project defines mypy and black environments in tox.ini plus a [mypy] section in setup.cfg. I read the test helper and the test class header, not every test, so the confidence is medium.",
+     "evidence": [
+      {
+       "ref": "test_schedule.py:96",
+       "quote": "class SchedulerTests(TestCase):"
+      },
+      {
+       "ref": "tox.ini:24",
+       "quote": "python -m mypy -p schedule"
+      },
+      {
+       "ref": "tox.ini:33",
+       "quote": "black --check ."
+      }
+     ]
+    },
+    {
+     "id": "clock-not-injectable",
+     "title": "The code calls datetime.datetime.now() directly, so tests must monkey-patch datetime",
+     "verdict": "improvable",
+     "confidence": "medium",
+     "detail": "Time is read from the system clock in many places instead of being passed in or supplied by a clock object. The tests work around it with a context manager that patches datetime, which is clever but brittle if the module's import style changes.",
+     "evidence": [
+      {
+       "ref": "schedule/__init__.py:672",
+       "quote": "datetime.datetime.now() >= self.next_run"
+      },
+      {
+       "ref": "test_schedule.py:39",
+       "quote": "class mock_datetime:"
+      }
+     ],
+     "recommendation": "Accept an optional clock or now() callable in Scheduler and use it everywhere."
+    }
+   ]
+  },
+  {
+   "id": "coupling",
+   "summary": "Nearly dependency-free and loosely tied to the outside world; coupled to pytz in the timezone code, and to shared module state.",
+   "findings": [
+    {
+     "id": "no-runtime-dependencies",
+     "title": "No required dependencies; pytz is optional and loaded lazily",
+     "verdict": "good",
+     "confidence": "high",
+     "detail": "Installing the library pulls in nothing, and the timezone extra is declared as optional.",
+     "evidence": [
+      {
+       "ref": "schedule/__init__.py:499",
+       "quote": "import pytz"
+      },
+      {
+       "ref": "pyproject.toml:20",
+       "quote": "timezone = [\"pytz\"]"
+      }
+     ]
+    },
+    {
+     "id": "global-default-scheduler",
+     "title": "A module-level default scheduler is shared state",
+     "verdict": "depends",
+     "confidence": "medium",
+     "detail": "The convenience functions all act on one global Scheduler, and the module also exposes its job list directly (with a TODO asking whether it should be a copy). Job and Scheduler also reach into each other: do() appends the job to scheduler.jobs.",
+     "evidence": [
+      {
+       "ref": "schedule/__init__.py:837",
+       "quote": "default_scheduler = Scheduler()"
+      },
+      {
+       "ref": "schedule/__init__.py:840",
+       "quote": "jobs = default_scheduler.jobs"
+      },
+      {
+       "ref": "schedule/__init__.py:663",
+       "quote": "self.scheduler.jobs.append(self)"
+      }
+     ],
+     "depends_on": "Whether several independent components in one process will each schedule jobs through the module-level API.",
+     "context_note": "Ideal for a script or one application. If libraries start sharing that global, they will see and clear each other's jobs, and tests need schedule.clear() in setUp. The Scheduler class is the escape hatch."
+    },
+    {
+     "id": "pytz-specific-api",
+     "title": "The timezone code is tied to pytz's API rather than the standard library",
+     "verdict": "improvable",
+     "confidence": "medium",
+     "detail": "It type-checks the argument against pytz.BaseTzInfo and relies on pytz's normalize(), which standard-library zoneinfo objects do not have. Supporting zoneinfo would need a different approach to DST correction.",
+     "evidence": [
+      {
+       "ref": "schedule/__init__.py:503",
+       "quote": "isinstance(tz, pytz.BaseTzInfo)"
+      },
+      {
+       "ref": "schedule/__init__.py:789",
+       "quote": "moment = self.at_time_zone.normalize(moment)"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "performance",
+   "summary": "Simple linear scans that are right for the intended scale; I did not profile anything.",
+   "findings": [
+    {
+     "id": "linear-scan-per-tick",
+     "title": "Every tick scans all jobs, and the next-run lookup is linear",
+     "verdict": "depends",
+     "confidence": "medium",
+     "detail": "run_pending() evaluates every job's should_run (a clock read each) and sorts the runnable ones; get_next_run() takes the minimum over all jobs. That is O(n) per tick, which is irrelevant for tens or hundreds of jobs.",
+     "evidence": [
+      {
+       "ref": "schedule/__init__.py:99",
+       "quote": "runnable_jobs = (job for job in self.jobs if job.should_run)"
+      },
+      {
+       "ref": "schedule/__init__.py:193",
+       "quote": "return min(jobs_filtered).next_run"
+      }
+     ],
+     "depends_on": "How many jobs are registered and how often run_pending() is called.",
+     "context_note": "For learning, this is the right simplicity-for-speed trade. With thousands of jobs a heap keyed by next_run would remove the scan; this claim is from reading, not from a benchmark."
+    }
+   ]
+  }
+ ],
+ "learning": {
+  "patterns_to_copy": [
+   {
+    "title": "A fluent builder with early, instructive errors",
+    "why": "every(10).minutes.do(job) reads like English, and misuse fails at configuration time with a message that says what to write instead, not later at run time.",
+    "evidence": [
+     {
+      "ref": "schedule/__init__.py:644-664",
+      "quote": "def do(self, job_func: Callable, *args, **kwargs):"
+     },
+     {
+      "ref": "schedule/__init__.py:328",
+      "quote": "raise IntervalError(\"Use seconds instead of second\")"
+     }
+    ]
+   },
+   {
+    "title": "Comment the why of hard edge cases",
+    "why": "The daylight-saving gap handling is the trickiest code in the library, and the comments explain the reasoning (including a worked example), which is what makes it maintainable.",
+    "evidence": [
+     {
+      "ref": "schedule/__init__.py:810-816",
+      "quote": "We ended up in a DST Gap"
+     }
+    ]
+   }
+  ],
+  "anti_patterns": [
+   {
+    "title": "Seven copy-pasted weekday properties",
+    "why": "monday through sunday are the same 10 lines with one word changed, about 75 lines in total. Any fix to the message or the rule has to be made seven times.",
+    "fix": "Write one helper such as _weekday(self, name) and make each property a one-line call to it.",
+    "evidence": [
+     {
+      "ref": "schedule/__init__.py:380-455",
+      "quote": "Scheduling .monday() jobs is only allowed for weekly jobs."
+     }
+    ]
+   },
+   {
+    "title": "Properties that change the object",
+    "why": "Reading job.seconds sets self.unit, so merely evaluating the attribute (in a debugger, an inspector or a hasattr call) mutates the job. The fluent syntax is the trade-off the author chose.",
+    "fix": "Use methods (.seconds()) when an attribute access should not have side effects, or document the behaviour clearly.",
+    "evidence": [
+     {
+      "ref": "schedule/__init__.py:333",
+      "quote": "self.unit = \"seconds\""
+     }
+    ]
+   },
+   {
+    "title": "An error message with an unfilled placeholder",
+    "why": "The text contains {} but is never formatted, so the user gets the template instead of the value. Error messages are code and need tests too.",
+    "fix": "Use an f-string or .format(), and assert on the message in a test.",
+    "evidence": [
+     {
+      "ref": "schedule/__init__.py:546-549",
+      "quote": "\"Invalid number of hours ({} is not between 0 and 23)\""
+     }
+    ]
+   }
+  ]
+ },
+ "limits": [
+  "Static analysis only; nothing was executed, imported or installed.",
+  "Analyzed a shallow clone of github.com/dbader/schedule at commit 82a43db (MIT licence), using the tree as of that commit.",
+  "Behaviour claims (for example that a raising job stays due) come from reading the control flow, not from running it.",
+  "Performance statements are from reading, not profiling.",
+  "Example report: the usage context was assumed (learning), not confirmed with a user."
+ ]
+}
