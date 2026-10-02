@@ -1,0 +1,14 @@
+{
+  "name": "code-teardown",
+  "description": "A marketplace with one plugin: code-teardown, a static, evidence-backed teardown of repos, .pyc files and Docker images.",
+  "owner": {
+    "name": "Miguel Hermida"
+  },
+  "plugins": [
+    {
+      "name": "code-teardown",
+      "source": "./",
+      "description": "Critical, evidence-backed teardown of source repos, .pyc files and Docker images."
+    }
+  ]
+}
