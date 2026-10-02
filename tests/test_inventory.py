@@ -207,3 +207,16 @@ def test_cli_writes_json_file(repo, tmp_path):
     out = tmp_path / "inv.json"
     subprocess.run([sys.executable, str(SCRIPT), str(repo), "--out", str(out)], check=True, capture_output=True)
     assert json.loads(out.read_text())["python"]["stats"]["functions"] > 0
+
+
+def test_sql_built_in_a_variable_is_flagged(tmp_path):
+    (tmp_path / "db.py").write_text(
+        "def a(term, conn):\n"
+        "    query = f\"SELECT code FROM links WHERE url LIKE '%{term}%'\"\n"
+        "    return conn.execute(query)\n"
+        "def b(x):\n    return \"DELETE FROM t WHERE id = %s\" % x\n"
+        "def c(x):\n    return \"UPDATE t SET a = {}\".format(x)\n"
+        "def safe(conn, x):\n    return conn.execute(\"SELECT a FROM t WHERE id = ?\", (x,))\n"
+        "def prose(n):\n    return f\"We will select from {n} options\"\n")
+    found = sorted(s["line"] for s in signals(inventory(str(tmp_path)), "sql_string_building"))
+    assert found == [2, 5, 7]          # no duplicates, no hit on parametrized SQL or ordinary prose

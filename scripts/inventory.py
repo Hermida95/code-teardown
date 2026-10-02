@@ -44,6 +44,7 @@ MAX_FILE_BYTES = 2_000_000
 IMPORT_TO_DIST = {"yaml": "pyyaml", "PIL": "pillow", "cv2": "opencv-python", "sklearn": "scikit-learn",
                   "bs4": "beautifulsoup4", "dateutil": "python-dateutil", "dotenv": "python-dotenv",
                   "jwt": "pyjwt", "attr": "attrs", "serial": "pyserial", "Crypto": "pycryptodome"}
+SQL_RE = re.compile(r"\b(SELECT\s.+?\sFROM|INSERT\s+(?:OR\s+\w+\s+)?INTO|UPDATE\s+\w+\s+SET|DELETE\s+FROM)\b", re.I | re.S)
 TODO_RE = re.compile(r"#.*\b(TODO|FIXME|HACK|XXX)\b")
 
 
@@ -75,6 +76,8 @@ class FileAnalyzer(ast.NodeVisitor):
 
     def signal(self, kind: str, node: ast.AST, snippet: str | None = None) -> None:
         line = getattr(node, "lineno", 0)
+        if any(s["kind"] == kind and s["line"] == line for s in self.signals):
+            return
         text = snippet if snippet is not None else self.lines[line - 1].strip()[:120] if 0 < line <= len(self.lines) else ""
         self.signals.append({"kind": kind, "path": self.rel, "line": line, "snippet": text})
 
@@ -167,8 +170,24 @@ class FileAnalyzer(ast.NodeVisitor):
                 # Never echo the literal: the report must not leak the secret.
                 self.signal("hardcoded_secret_candidate", node, f"{name} = <str literal, {len(value.value)} chars>")
 
+    def visit_JoinedStr(self, node):
+        literal = "".join(p.value for p in node.values if isinstance(p, ast.Constant) and isinstance(p.value, str))
+        if any(isinstance(p, ast.FormattedValue) for p in node.values) and SQL_RE.search(literal):
+            self.signal("sql_string_building", node)
+        self.generic_visit(node)
+
+    def visit_BinOp(self, node):
+        left = node.left
+        if isinstance(node.op, (ast.Mod, ast.Add)) and isinstance(left, ast.Constant) \
+                and isinstance(left.value, str) and SQL_RE.search(left.value):
+            self.signal("sql_string_building", node)
+        self.generic_visit(node)
+
     def visit_Call(self, node):
         func = node.func
+        if isinstance(func, ast.Attribute) and func.attr == "format" and isinstance(func.value, ast.Constant) \
+                and isinstance(func.value.value, str) and SQL_RE.search(func.value.value):
+            self.signal("sql_string_building", node)
         name = func.id if isinstance(func, ast.Name) else None
         dotted = ast.unparse(func) if isinstance(func, (ast.Attribute, ast.Name)) else ""
         kwargs = {k.arg: k.value for k in node.keywords if k.arg}
