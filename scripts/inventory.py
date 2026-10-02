@@ -25,7 +25,7 @@ from collections import defaultdict
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from _common import dump  # noqa: E402
+from _common import SECRET_NAME, dump  # noqa: E402
 
 SKIP_DIRS = {".git", ".hg", ".svn", "node_modules", ".venv", "venv", "env", "__pycache__",
              ".tox", ".nox", ".mypy_cache", ".pytest_cache", ".ruff_cache", "dist", "build",
@@ -44,7 +44,6 @@ MAX_FILE_BYTES = 2_000_000
 IMPORT_TO_DIST = {"yaml": "pyyaml", "PIL": "pillow", "cv2": "opencv-python", "sklearn": "scikit-learn",
                   "bs4": "beautifulsoup4", "dateutil": "python-dateutil", "dotenv": "python-dotenv",
                   "jwt": "pyjwt", "attr": "attrs", "serial": "pyserial", "Crypto": "pycryptodome"}
-SECRET_NAME = re.compile(r"(password|passwd|secret|token|api_?key|private_?key)", re.I)
 TODO_RE = re.compile(r"#.*\b(TODO|FIXME|HACK|XXX)\b")
 
 
