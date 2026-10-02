@@ -20,13 +20,18 @@ def make_zip(path: Path, files: dict[str, bytes | str]) -> Path:
     return path
 
 
-def _layer_bytes(files: dict[str, bytes | str]) -> bytes:
+def _layer_bytes(files: dict) -> bytes:
+    """Layer tar. A value may be str/bytes, or (content, mode) to set permissions."""
     buf = io.BytesIO()
     with tarfile.open(fileobj=buf, mode="w") as tf:
         for name, data in files.items():
+            mode = 0o644
+            if isinstance(data, tuple):
+                data, mode = data
             raw = data.encode() if isinstance(data, str) else data
             info = tarfile.TarInfo(name)
             info.size = len(raw)
+            info.mode = mode
             tf.addfile(info, io.BytesIO(raw))
     return buf.getvalue()
 
@@ -63,7 +68,7 @@ def make_docker_tar(path: Path, layout: str = "classic", layers: list[dict] | No
         {"var/lib/apt/lists/x": "cache" * 100},
     ]
     config = dict(config or DEFAULT_CONFIG)
-    layer_blobs = [_layer_bytes(files) for files in layers]
+    layer_blobs = [files if isinstance(files, bytes) else _layer_bytes(files) for files in layers]
     diff_ids = ["sha256:" + hashlib.sha256(b).hexdigest() for b in layer_blobs]
     config["rootfs"] = {"type": "layers", "diff_ids": diff_ids}
     config_raw = json.dumps(config).encode()
