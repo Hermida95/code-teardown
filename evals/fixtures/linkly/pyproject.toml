@@ -1,0 +1,8 @@
+[project]
+name = "linkly"
+version = "0.3.0"
+description = "A tiny URL shortener"
+dependencies = ["requests>=2.31"]
+
+[project.scripts]
+linkly = "linkly.server:main"
