@@ -26,7 +26,7 @@ import tempfile
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from _common import SECRET_NAME, dump, safe_join  # noqa: E402
+from _common import SECRET_NAME, TOKEN_VALUE, dump, safe_join  # noqa: E402
 
 MAX_JSON_BYTES = 5_000_000
 MAX_ENTRIES = 2_000_000
@@ -68,7 +68,6 @@ SENSITIVE_QUIET = ("etc/ssl/", "usr/share/ca-certificates/", "usr/local/share/ca
                    "usr/lib/python", "usr/local/lib/python", "usr/lib/node_modules/", "usr/local/lib/node_modules/")
 SENSITIVE_TOKENS = (".env", "id_", ".pem", ".key", ".pfx", ".p12", ".jks", "rc", "netrc", "git-credentials",
                     "credentials", "config", "tfstate", "htpasswd")
-TOKEN_VALUE = re.compile(r"(sk-[A-Za-z0-9]{10,}|ghp_[A-Za-z0-9]{10,}|AKIA[0-9A-Z]{12,}|-----BEGIN)")
 
 
 class ImageError(Exception):

@@ -15,6 +15,8 @@ from typing import Callable
 
 SECRET_NAME = re.compile(r"(password|passwd|secret|token|api_?key|private_?key)", re.I)
 
+TOKEN_VALUE = re.compile(r"(sk-[A-Za-z0-9]{10,}|ghp_[A-Za-z0-9]{10,}|AKIA[0-9A-Z]{12,}|-----BEGIN)")
+
 MAX_MEMBER_BYTES = 20_000_000
 MAX_TOTAL_BYTES = 200_000_000
 MAX_MEMBERS = 5000
