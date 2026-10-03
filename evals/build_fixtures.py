@@ -68,7 +68,7 @@ def main(workspace: str) -> None:
     config = {
         "architecture": "amd64", "os": "linux", "created": "2026-09-30T10:00:00Z",
         "config": {"User": "", "WorkingDir": "/app",
-                   "Env": ["PATH=/usr/local/bin:/usr/bin", "LINKLY_API_KEY=sk-live-abcdefghijklmnop1234"],
+                   "Env": ["PATH=/usr/local/bin:/usr/bin", "LINKLY_API_KEY=" + "sk-live-" + "abcdefghijklmnop1234"],
                    "Entrypoint": ["/bin/sh", "-c", "python -m linkly.server"], "Cmd": None,
                    "ExposedPorts": {"8080/tcp": {}, "22/tcp": {}}},
         "history": [

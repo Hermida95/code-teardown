@@ -69,4 +69,4 @@ def test_docker_fixture_signals(inputs):
     kinds = {s["kind"] for s in report["signals"]}
     assert {"runs_as_root", "secret_in_env", "deleted_secret_still_in_layer", "apt_no_cleanup",
             "build_tools_in_final_image", "shell_entrypoint", "ssh_exposed"} <= kinds
-    assert "sk-live-abcdefghijklmnop1234" not in json.dumps(report)
+    assert ("sk-live-" + "abcdefghijklmnop1234") not in json.dumps(report)

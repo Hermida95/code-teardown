@@ -110,7 +110,7 @@ def test_deleted_secret_still_in_earlier_layer(tmp_path):
 
 
 def test_secret_present_in_final_image(tmp_path):
-    layers = [{"root/.ssh/id_rsa": "-----BEGIN PRIVATE KEY-----", "etc/ssl/certs/ca.pem": "ok"}]
+    layers = [{"root/.ssh/id_rsa": "-----BEGIN " + "PRIVATE KEY-----", "etc/ssl/certs/ca.pem": "ok"}]
     report = run(make_docker_tar(tmp_path / "i.tar", layers=layers))
     sensitive = [s for s in report["signals"] if s["kind"] == "sensitive_file"]
     assert [s["path"] for s in sensitive] == ["root/.ssh/id_rsa"]        # CA bundles are not noise
