@@ -17,6 +17,7 @@ SECRET_NAME = re.compile(r"(password|passwd|secret|token|api_?key|private_?key)"
 
 TOKEN_VALUE = re.compile(r"(sk-[A-Za-z0-9]{10,}|ghp_[A-Za-z0-9]{10,}|AKIA[0-9A-Z]{12,}|-----BEGIN)")
 
+MAX_SCAN_BYTES = 20_000_000_000      # declared bytes of all members we are willing to walk through
 MAX_MEMBER_BYTES = 20_000_000
 MAX_TOTAL_BYTES = 200_000_000
 MAX_MEMBERS = 5000
@@ -67,6 +68,51 @@ def available_tools() -> dict:
     return {name: bool(shutil.which(name)) for name in names}
 
 
+def bounded_name(rel: str, limit: int = 120) -> str:
+    """Make a relative path safe to reuse as part of a file name inside a work directory.
+
+    File systems reject components over 255 bytes and we append suffixes, so any component
+    longer than `limit` is replaced by a short hash that keeps its extension.
+    """
+    import hashlib
+    parts = []
+    for part in rel.split("/"):
+        if len(part.encode("utf-8", "replace")) > limit:
+            suffix = "".join(Path(part).suffixes[-2:])[:12]
+            part = hashlib.sha1(part.encode("utf-8", "replace")).hexdigest()[:16] + suffix
+        parts.append(part)
+    return "/".join(parts)
+
+
+def checked_output_path(arg: str, suffix: str, force: bool) -> Path:
+    """Validate a user-supplied output file.
+
+    The scripts can be driven by an agent that read untrusted text, so they must not be
+    usable to overwrite arbitrary files: the name has to end in the expected extension and
+    an existing file is only replaced with an explicit --force.
+    """
+    path = Path(arg).expanduser()
+    if path.suffix.lower() != suffix:
+        raise SystemExit(f"error: --out must end with {suffix} (got {arg!r}); refusing to write elsewhere")
+    if path.is_dir():
+        raise SystemExit(f"error: {path} is a directory")
+    if path.exists() and not force:
+        raise SystemExit(f"error: {path} already exists; pass --force to overwrite it")
+    return path
+
+
+def empty_workdir(arg: str | None, prefix: str = "code-teardown-") -> Path:
+    """Create (or reuse an empty) work directory. A file or a non-empty directory is an error."""
+    import tempfile
+    if arg is None:
+        return Path(tempfile.mkdtemp(prefix=prefix))
+    path = Path(arg).expanduser()
+    if path.exists() and (not path.is_dir() or any(path.iterdir())):
+        raise SystemExit(f"error: work directory {path} must not exist yet or must be an empty directory")
+    path.mkdir(parents=True, exist_ok=True)
+    return path
+
+
 def dump(data: dict) -> None:
     json.dump(data, sys.stdout, indent=2, ensure_ascii=False)
     sys.stdout.write("\n")
@@ -105,8 +151,13 @@ def extract_members(archive: zipfile.ZipFile | tarfile.TarFile, dest: Path,
     total = 0
     is_zip = isinstance(archive, zipfile.ZipFile)
     members = archive.infolist() if is_zip else archive
+    declared = 0
     for member in members:
         name = member.filename if is_zip else member.name
+        declared += member.file_size if is_zip else member.size
+        if declared > MAX_SCAN_BYTES:
+            skipped.append({"name": name, "reason": "archive declares more data than the scan budget; stopped here"})
+            break
         if (member.is_dir() if is_zip else not member.isreg()):
             if not is_zip and (member.issym() or member.islnk()):
                 skipped.append({"name": name, "reason": "link entries are never extracted"})
@@ -116,6 +167,9 @@ def extract_members(archive: zipfile.ZipFile | tarfile.TarFile, dest: Path,
         target = safe_join(dest, name)
         if target is None:
             skipped.append({"name": name, "reason": "unsafe path (absolute or traversal)"})
+            continue
+        if any(len(part.encode("utf-8", "replace")) > 200 for part in name.split("/")):
+            skipped.append({"name": name[:120] + "...", "reason": "path component too long to extract"})
             continue
         size = member.file_size if is_zip else member.size
         if size > max_member or total + size > max_total or len(written) >= max_count:

@@ -15,6 +15,12 @@ Usage: extract_pyc.py PATH [--out WORKDIR]
 """
 from __future__ import annotations
 
+import sys
+
+if sys.version_info < (3, 11):  # keep this check above every other import
+    sys.exit(f"code-teardown needs Python 3.11 or newer (this is {sys.version_info.major}.{sys.version_info.minor}). "
+             "Try python3.12 or python3.11, or: uv run --python 3.12 <script>")
+
 import argparse
 import dis
 import io
@@ -25,20 +31,20 @@ import shutil
 import subprocess
 import sys
 import tarfile
-import tempfile
 import types
 import zipfile
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from _common import (SECRET_NAME, available_tools, dump, extract_members,  # noqa: E402
-                     parse_pyc_magic, running_python)
+from _common import (SECRET_NAME, available_tools, bounded_name, dump, empty_workdir,  # noqa: E402
+                     extract_members, parse_pyc_magic, running_python)
 
 MAX_PYC_FILES = 500
 MAX_PYC_BYTES = 50_000_000
 MAX_DIS_BYTES = 5_000_000
 WORKER_TIMEOUT = 60
 DECOMPILER_TIMEOUT = 60
+MAX_DECOMPILED_CHARS = 5_000_000
 CO_NEWLOCALS = 0x2
 CO_ASYNC = 0x80 | 0x200
 DECODERS = {"b64decode", "decompress", "a85decode", "unhexlify", "b85decode"}
@@ -263,7 +269,8 @@ def process_pyc(pyc: Path, rel: str, workdir: Path) -> dict:
 
     result: dict = {}
     notes: list[str] = []
-    safe_name = rel.replace("/", "__")
+    safe_rel = bounded_name(rel)
+    safe_name = safe_rel.replace("/", "__")
     if label == running_python():
         payload = workdir / ".payload" / safe_name
         payload.parent.mkdir(exist_ok=True)
@@ -277,18 +284,18 @@ def process_pyc(pyc: Path, rel: str, workdir: Path) -> dict:
 
     dis_text = result.pop("dis_text", "") if result else ""
     if dis_text:
-        dis_path = workdir / "dis" / (rel + ".dis.txt")
+        dis_path = workdir / "dis" / (safe_rel + ".dis.txt")
         dis_path.parent.mkdir(parents=True, exist_ok=True)
         dis_path.write_text(dis_text, encoding="utf-8")
         record["dis_path"] = dis_path.relative_to(workdir).as_posix()
         for fn in result.get("functions", []):
             fn["dis_ref"] = f"{record['dis_path']}:{fn.pop('dis_line')}"
 
-    tool, output = try_decompile(pyc, label)
+    tool, output = try_decompile(pyc.resolve(), label)
     if tool:
-        out_path = workdir / "decompiled" / (rel + ".py")
+        out_path = workdir / "decompiled" / (safe_rel + ".py")
         out_path.parent.mkdir(parents=True, exist_ok=True)
-        out_path.write_text(output, encoding="utf-8")
+        out_path.write_text(output[:MAX_DECOMPILED_CHARS], encoding="utf-8")
         record["decompiled_path"] = out_path.relative_to(workdir).as_posix()
         record["method"] = f"decompiler:{tool}"
         record["quality_judgment_confidence"] = "medium"
@@ -309,16 +316,6 @@ def process_pyc(pyc: Path, rel: str, workdir: Path) -> dict:
     record["notes"] = notes
     record.update(result)
     return record
-
-
-def prepare_workdir(out: str | None) -> Path:
-    if out is None:
-        return Path(tempfile.mkdtemp(prefix="code-teardown-"))
-    path = Path(out).expanduser()
-    if path.exists() and any(path.iterdir()):
-        raise SystemExit(f"error: work directory {path} is not empty")
-    path.mkdir(parents=True, exist_ok=True)
-    return path
 
 
 def collect(path: Path, workdir: Path) -> tuple[list[tuple[Path, str]], dict]:
@@ -376,7 +373,7 @@ def extract(path_arg: str, out: str | None = None) -> dict:
     path = Path(path_arg).expanduser()
     if not path.exists():
         raise SystemExit(f"error: {path} does not exist")
-    workdir = prepare_workdir(out)
+    workdir = empty_workdir(out)
     (workdir / ".payload").mkdir(exist_ok=True)
     files, info = collect(path, workdir)
     limits: list[str] = []
@@ -417,6 +414,11 @@ def extract(path_arg: str, out: str | None = None) -> dict:
 
 def main(argv: list[str]) -> int:
     if len(argv) == 3 and argv[1] == "--worker":
+        try:
+            import resource
+            resource.setrlimit(resource.RLIMIT_CPU, (WORKER_TIMEOUT + 5, WORKER_TIMEOUT + 5))
+        except (ImportError, ValueError, OSError):    # not available everywhere; the parent still enforces a timeout
+            pass
         json.dump(analyze_bytecode(Path(argv[2]).read_bytes()), sys.stdout)
         return 0
     parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])

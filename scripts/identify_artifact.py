@@ -9,6 +9,12 @@ Prints a JSON report on stdout.
 """
 from __future__ import annotations
 
+import sys
+
+if sys.version_info < (3, 11):  # keep this check above every other import
+    sys.exit(f"code-teardown needs Python 3.11 or newer (this is {sys.version_info.major}.{sys.version_info.minor}). "
+             "Try python3.12 or python3.11, or: uv run --python 3.12 <script>")
+
 import struct
 import sys
 import tarfile
@@ -21,6 +27,8 @@ from _common import available_tools, dump, parse_pyc_magic, running_python  # no
 SKIP_DIRS = {".git", ".hg", ".svn", "node_modules", ".venv", "venv", "__pycache__",
              ".tox", ".mypy_cache", ".pytest_cache", "dist", "build"}
 MAX_TAR_MEMBERS = 20000
+MAX_TAR_DECLARED_BYTES = 20_000_000_000   # stop walking a tar that declares more data than this
+MAX_DIRS = 100_000
 MAX_WALK_FILES = 50000
 
 PIPELINES = {
@@ -134,15 +142,17 @@ def classify_tar(path: Path) -> dict | None:
         names: list[str] = []
         truncated = False
         with tarfile.open(path, "r:*") as tf:
+            declared = 0
             for member in tf:
                 names.append(member.name)
-                if len(names) >= MAX_TAR_MEMBERS:
+                declared += member.size if member.isreg() else 0
+                if len(names) >= MAX_TAR_MEMBERS or declared > MAX_TAR_DECLARED_BYTES:
                     truncated = True
                     break
     except (tarfile.TarError, OSError, EOFError):
         return None
     top = {n.lstrip("./") for n in names}
-    notes = ["Archive listing truncated; classification may be incomplete."] if truncated else []
+    notes = ["Archive listing truncated (too many entries or too much declared data); classification may be incomplete."] if truncated else []
     if "manifest.json" in top:
         report = result(str(path), "docker_image_tar", True,
                         ["manifest.json at the tar root (docker save, classic layout)"],
@@ -169,10 +179,16 @@ def classify_dir(path: Path) -> dict:
     counts = {"py": 0, "pyc": 0, "other_code": 0}
     other_exts = {".js", ".ts", ".go", ".rs", ".java", ".c", ".cpp", ".rb", ".php", ".cs", ".kt", ".swift"}
     seen = 0
+    dirs = 0
     stack = [path]
-    while stack and seen < MAX_WALK_FILES:
+    while stack and seen < MAX_WALK_FILES and dirs < MAX_DIRS:
         current = stack.pop()
-        for entry in current.iterdir():
+        dirs += 1
+        try:
+            entries = list(current.iterdir())
+        except OSError:                       # unreadable directory: skip it, keep going
+            continue
+        for entry in entries:
             if entry.is_symlink():
                 continue
             if entry.is_dir():

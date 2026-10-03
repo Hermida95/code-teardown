@@ -1,9 +1,8 @@
 ---
 name: code-teardown
-description: Static teardown of an existing artifact - a source repo, Python .pyc files or compiled packages (wheel, zipapp, egg), or a Docker image - that explains how it is built and gives a critical verdict weighted by how it will be used - what is good, what is bad, what depends on context - with every claim backed by cited evidence. Use whenever the user wants to study, understand, review, critique or learn from someone else's code, a .pyc, a wheel, a docker save tar or an image name, even if they never say "teardown". Produces one self-contained HTML report plus a short chat summary. Not for malware analysis, cracking or runtime debugging.
+description: Take apart someone else's code and judge how well it is built: a critical, evidence-backed teardown of a source repo or project directory, Python .pyc files, __pycache__ folders and compiled packages (wheel, zipapp, egg), or a Docker image (docker save tar or image name). Says what is good, what is bad and what depends on how it will be used (production service, script, library, learning), with confidence levels and file:line citations, as one self-contained HTML report. Use this whenever the user asks to tear down, dissect, take apart, critique, audit the design of, review the architecture of, or learn from a repo, a .pyc, a wheel or an image, asks whether something is well built, what to copy or avoid, or wants an honest verdict before adopting, promoting or deploying it - even without saying "teardown". Static analysis only; not for malware analysis, cracking, running or debugging code, or writing code.
 compatibility: Requires Python 3.11+. Docker CLI only when analyzing an image by name. Optional - pycdc or decompyle3 for better .pyc output.
 license: MIT
-allowed-tools: Bash(python3 ${CLAUDE_SKILL_DIR}/scripts/*)
 ---
 
 # code-teardown
@@ -25,7 +24,9 @@ Read these before touching the artifact; the reasons matter more than the wordin
 
 ## Pipeline
 
-Create a work directory first: `WORK=$(mktemp -d)`. Scripts print JSON; read the fields named below. Use `python3 ${CLAUDE_SKILL_DIR}/scripts/<script>`.
+Create a work directory first: `WORK=$(mktemp -d)`. Scripts print JSON; read the fields named below. Use `python3 ${CLAUDE_SKILL_DIR}/scripts/<script>`. They need Python 3.11+: if `python3` is older, use `python3.12`, `python3.11` or `uv run --python 3.12`.
+
+The scripts only write what you name: a work directory that is new or empty, one `.json` inventory and one `.html` report. They refuse to overwrite an existing file unless you pass `--force`, so never point `--out` at a file you did not create.
 
 ### 1. Identify
 
@@ -78,7 +79,7 @@ Write `findings.json` following [references/report-schema.md](references/report-
 ```
 render_report.py findings.json --out ./code-teardown-<name>.html --root <evidence root> [--root ...] [--docker-report $WORK/img/docker-report.json] [--extraction $WORK/pyc/extraction.json]
 ```
-If it rejects the file, fix the findings: find the real evidence, lower the confidence, or drop the claim. Do not weaken the rules to get through, and use `--no-verify` only when the evidence cannot exist as local files (the report then carries a visible warning). The report language follows the user's (`meta.language`: `en` or `es`).
+If it rejects the file, fix the findings: find the real evidence, lower the confidence, or drop the claim. To replace a report from an earlier run, pass `--force`. Do not weaken the rules to get through, and use `--no-verify` only when the evidence cannot exist as local files (the report then carries a visible warning). The report language follows the user's (`meta.language`: `en` or `es`).
 
 Finish with a **short chat summary** (about ten lines): what the artifact is, overall confidence and why, the three things done best, the three that matter most in the chosen context, any assumed context or major limit, and the report path. Mention the licence note once, briefly.
 

@@ -65,6 +65,8 @@ Just ask. The skill triggers on requests like:
 - "Here is a `docker save` tar of our staging image. What is good, what is sloppy, does anything leak?"
 - "I found these `.pyc` files and don't have the source. How was it built and is it any good?"
 
+If Claude does not pick the skill up on its own, name it ("use code-teardown on ~/src/project") or type `/code-teardown` and let autocomplete find it (plugin installs may show it as `/code-teardown:code-teardown`).
+
 It will ask how the artifact will be used (production service, automation script, library, learning), then write `code-teardown-<name>.html` and give a ten-line summary in chat.
 
 An [example report](examples/schedule/report.html) on [`dbader/schedule`](https://github.com/dbader/schedule) (MIT) is included, with its [`findings.json`](examples/schedule/findings.json). To re-verify its 52 citations yourself:
@@ -100,9 +102,14 @@ This is a **static** analyzer for learning, not a security tool.
 - Archives are extracted with traversal and size guards; only regular files are written.
 - Secret values are never echoed: findings cite the name and location, and the report refuses text that looks like a token or key.
 - The HTML loads no external resources, escapes all content and ships a hash-based Content-Security-Policy.
+- The skill does **not** pre-approve its scripts, so your permission settings decide what runs unprompted. The scripts write only a new or empty work directory, one `.json` and one `.html`, and refuse to overwrite an existing file without `--force`.
+- Hostile inputs are bounded: regexes that read artifact text have bounded input and no catastrophic patterns, deep nesting is contained per file, archives have size and entry budgets, and image references are validated before `docker save`.
+- The test fixtures under `evals/` are **intentionally vulnerable** (a prompt-injection repo, planted secrets and SQL injection). They are inert data and are never executed.
 
 ## Limitations
 
+- Automatic activation is not reliable: in a small trial (20 requests, one run each) Claude used the skill unprompted for only a few of the requests that should trigger it, and never for the ones that should not. Naming the skill is the dependable way.
+- Requires Python 3.11+. Older interpreters get a clear message instead of a traceback.
 - A `.pyc` from a different Python than the one running the scripts can only be read for its header and strings unless a decompiler is installed. Decompiler integration is exercised with stand-in tools in tests, not yet with real `pycdc` or `decompyle3` builds.
 - Import graph and function metrics are Python-only. Other languages get size, manifests and entry points, and the model reads the code directly with lower confidence.
 - Docker support is tested against synthetic archives in the classic and OCI layouts. An opt-in integration test (`pytest -m docker`) uses a real daemon.

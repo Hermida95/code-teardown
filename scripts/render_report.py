@@ -14,10 +14,16 @@ rail. It refuses to render anything that breaks the evidence rules:
 All text is HTML-escaped. The page loads no external resources and ships a
 Content-Security-Policy whose only script allowance is a hash of its own script.
 
-Usage: render_report.py FINDINGS.json --out report.html [--root DIR ...]
+Usage: render_report.py FINDINGS.json --out report.html [--force] [--root DIR ...]
                         [--docker-report FILE] [--extraction FILE] [--no-verify]
 """
 from __future__ import annotations
+
+import sys
+
+if sys.version_info < (3, 11):  # keep this check above every other import
+    sys.exit(f"code-teardown needs Python 3.11 or newer (this is {sys.version_info.major}.{sys.version_info.minor}). "
+             "Try python3.12 or python3.11, or: uv run --python 3.12 <script>")
 
 import argparse
 import base64
@@ -30,7 +36,7 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from _common import TOKEN_VALUE, safe_join  # noqa: E402
+from _common import TOKEN_VALUE, checked_output_path, safe_join  # noqa: E402
 
 TEMPLATE = Path(__file__).resolve().parent.parent / "assets" / "report-template.html"
 AXES = ["separation_of_concerns", "error_handling", "security", "testability", "coupling", "performance"]
@@ -100,11 +106,13 @@ L = {
 }
 SYMBOL = {"good": "✔", "improvable": "▲", "bad": "✖", "depends": "◆"}
 
-FILE_REF = re.compile(r"^(?P<path>[^\s:][^:]*?):(?P<start>\d+)(?:-(?P<end>\d+))?$")
-LAYER_REF = re.compile(r"^layer (?P<n>\d+)(?:: .+)?$")
-HISTORY_REF = re.compile(r"^history\[(?P<n>\d+)\]$")
+# Numbers are limited to 9 digits: longer ones are never real line or layer numbers, and
+# huge integer strings make int() raise.
+FILE_REF = re.compile(r"^(?P<path>[^\s:][^:]{0,1000}?):(?P<start>\d{1,9})(?:-(?P<end>\d{1,9}))?$")
+LAYER_REF = re.compile(r"^layer (?P<n>\d{1,9})(?:: .+)?$")
+HISTORY_REF = re.compile(r"^history\[(?P<n>\d{1,9})\]$")
 CONFIG_REF = re.compile(r"^config\.(?P<key>[A-Za-z_]+)$")
-BYTECODE_REF = re.compile(r"^(?P<file>.+\.pyc) :: (?P<qual>.+?)(?: \(line (?P<line>\d+)\))?$")
+BYTECODE_REF = re.compile(r"^(?P<file>.{1,1000}\.pyc) :: (?P<qual>.{1,500}?)(?: \(line (?P<line>\d{1,9})\))?$")
 COMMAND_REF = re.compile(r"^cmd: .+")
 
 
@@ -543,10 +551,8 @@ def render(data: dict, c: Checker, template: str) -> str:
         "@@THEME_AUTO@@": e(t["theme_auto"]), "@@THEME_LIGHT@@": e(t["theme_light"]), "@@THEME_DARK@@": e(t["theme_dark"]),
         "@@FOOTER@@": f'<p>{e(t["license"])}</p><p>code-teardown · MIT</p>',
     }
-    out = template
-    for key, value in replacements.items():
-        out = out.replace(key, value)
-    return out
+    pattern = re.compile("|".join(re.escape(key) for key in replacements))
+    return pattern.sub(lambda match: replacements[match.group(0)], template)
 
 
 def load_json(path: str | None, what: str) -> dict | None:
@@ -561,7 +567,8 @@ def load_json(path: str | None, what: str) -> dict | None:
 def main(argv: list[str]) -> int:
     parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     parser.add_argument("findings")
-    parser.add_argument("--out", required=True)
+    parser.add_argument("--out", required=True, help="the .html file to write")
+    parser.add_argument("--force", action="store_true", help="allow --out to overwrite an existing file")
     parser.add_argument("--root", action="append", default=[], help="directory the file:line evidence is relative to (repeatable)")
     parser.add_argument("--docker-report")
     parser.add_argument("--extraction")
@@ -569,6 +576,7 @@ def main(argv: list[str]) -> int:
                         help="skip file evidence checks (the report then carries a visible banner)")
     args = parser.parse_args(argv[1:])
 
+    out_path = checked_output_path(args.out, ".html", args.force)
     data = load_json(args.findings, "findings")
     checker = Checker([Path(r) for r in args.root], load_json(args.docker_report, "docker report"),
                       load_json(args.extraction, "extraction"), verify=not args.no_verify)
@@ -583,7 +591,7 @@ def main(argv: list[str]) -> int:
             print(f"  - {message}", file=sys.stderr)
         return 1
     template = TEMPLATE.read_text(encoding="utf-8")
-    Path(args.out).write_text(render(data, checker, template), encoding="utf-8")
+    out_path.write_text(render(data, checker, template), encoding="utf-8")
     print(json.dumps({"output": args.out, "findings": sum(len(a.get("findings", [])) for a in data["axes"]),
                       "evidence_checked": checker.checked, "evidence_total": checker.total,
                       "evidence_unverifiable": checker.unverifiable, "verified": not args.no_verify}))

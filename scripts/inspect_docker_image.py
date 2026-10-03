@@ -13,6 +13,12 @@ Usage: inspect_docker_image.py TARGET [--out WORKDIR] [--no-extract]
 """
 from __future__ import annotations
 
+import sys
+
+if sys.version_info < (3, 11):  # keep this check above every other import
+    sys.exit(f"code-teardown needs Python 3.11 or newer (this is {sys.version_info.major}.{sys.version_info.minor}). "
+             "Try python3.12 or python3.11, or: uv run --python 3.12 <script>")
+
 import argparse
 import io
 import json
@@ -26,10 +32,14 @@ import tempfile
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from _common import SECRET_NAME, TOKEN_VALUE, dump, safe_join  # noqa: E402
+from _common import SECRET_NAME, TOKEN_VALUE, dump, empty_workdir, safe_join  # noqa: E402
 
 MAX_JSON_BYTES = 5_000_000
 MAX_ENTRIES = 2_000_000
+MAX_LAYER_DECLARED_BYTES = 10_000_000_000    # file bytes one layer may declare before we stop walking it
+MAX_IMAGE_DECLARED_BYTES = 50_000_000_000
+MAX_INSTRUCTION_CHARS = 4000                 # regexes only ever see this much of a history entry
+IMAGE_REF = re.compile(r"[A-Za-z0-9][A-Za-z0-9._/:@+-]{0,254}")
 MAX_EXTRACT_FILES = 300
 MAX_EXTRACT_BYTES = 20_000_000
 MAX_EXTRACT_FILE = 256_000
@@ -86,9 +96,11 @@ class TarStore:
     def __init__(self, path: Path):
         self.tf = tarfile.open(path, "r:*")
         self.index: dict[str, tarfile.TarInfo] = {}
+        declared = 0
         for member in self.tf:
             self.index[norm(member.name)] = member
-            if len(self.index) > MAX_ENTRIES:
+            declared += member.size if member.isreg() else 0
+            if len(self.index) > MAX_ENTRIES or declared > MAX_IMAGE_DECLARED_BYTES:
                 break
 
     def has(self, name: str) -> bool:
@@ -207,21 +219,29 @@ def load_image(store) -> dict:
 # --- history and instructions -----------------------------------------------------------
 
 SECRET_ASSIGN = re.compile(
-    r"(?i)(\b[\w.-]*(?:password|passwd|secret|token|api_?key|private_?key)[\w.-]*)(\s*[=:]\s*)(\"[^\"]*\"|'[^']*'|\S+)")
+    r"(?i)(\b[\w.-]{0,64}(?:password|passwd|secret|token|api_?key|private_?key)[\w.-]{0,64})(\s*[=:]\s*)(\"[^\"]*\"|'[^']*'|\S+)")
 SECRET_FLAG = re.compile(r"(?i)(--(?:password|passwd|token|secret)[= ])\S+")
 
 
 def redact(text: str) -> str:
-    """Hide secret values in build instructions; names stay so the finding is still citeable."""
+    """Hide secret values in build instructions; names stay so the finding is still citeable.
+
+    Input is capped and the name part of the pattern is bounded, so a hostile history entry
+    cannot make the regex engine run quadratically.
+    """
+    text = text[:MAX_INSTRUCTION_CHARS]
     text = SECRET_ASSIGN.sub(lambda m: f"{m.group(1)}{m.group(2)}<redacted>", text)
     text = SECRET_FLAG.sub(lambda m: f"{m.group(1)}<redacted>", text)
     return TOKEN_VALUE.sub("<redacted>", text)
 
 
 def normalize_instruction(created_by: str) -> str:
-    text = created_by.strip()
+    text = created_by.strip()[:MAX_INSTRUCTION_CHARS]
     text = re.sub(r"\s*#\s*buildkit\s*$", "", text)
-    text = re.sub(r"^\|\d+\s+(?:\S+=\S*\s+)*?(?=/bin/sh -c )", "", text)
+    if re.match(r"\|\d+\s", text):           # BuildKit "|N ARG=value /bin/sh -c ..." form, parsed without backtracking
+        marker = text.find("/bin/sh -c ")
+        if marker != -1:
+            text = text[marker:]
     if text.startswith("/bin/sh -c #(nop)"):
         return text[len("/bin/sh -c #(nop)"):].strip()
     if text.startswith("/bin/sh -c "):
@@ -267,6 +287,7 @@ class Scanner:
         self.extracted: dict[str, Path] = {}
         self.extract_bytes = 0
         self.entries = 0
+        self.declared_total = 0
         self.truncated = False
 
     def shadow(self, path: str, by_layer: int) -> None:
@@ -312,8 +333,14 @@ class Scanner:
         self.layers.append(stats)
         added: set[str] = set()
         dir_bytes: dict[str, int] = {}
+        declared = 0
         with tarfile.open(fileobj=fileobj, mode="r:*") as tar:
             for member in tar:
+                declared += member.size if member.isreg() else 0
+                self.declared_total += member.size if member.isreg() else 0
+                if declared > MAX_LAYER_DECLARED_BYTES or self.declared_total > MAX_IMAGE_DECLARED_BYTES:
+                    stats["truncated"] = True      # walking on would mean unpacking a decompression bomb
+                    break
                 self.entries += 1
                 if self.entries > MAX_ENTRIES:
                     self.truncated = True
@@ -353,8 +380,11 @@ class Scanner:
                     target = safe_join(self.workdir, path)
                     data = tar.extractfile(member).read(MAX_EXTRACT_FILE)
                     if target and b"\0" not in data[:4096]:
-                        target.parent.mkdir(parents=True, exist_ok=True)
-                        target.write_bytes(data)
+                        try:
+                            target.parent.mkdir(parents=True, exist_ok=True)
+                            target.write_bytes(data)
+                        except OSError:        # e.g. a path that is a file in one layer and a directory in another
+                            continue
                         self.extracted[path] = target
                         self.extract_bytes += len(data)
         stats["top_dirs"] = [{"path": p, "bytes": b} for p, b in sorted(dir_bytes.items(), key=lambda kv: -kv[1])[:5]]
@@ -503,6 +533,9 @@ def inspect(store, source: str, workdir: Path | None, saved: bool = False) -> di
             handle = store.open(layer["name"])
             with handle:
                 scanner.scan(index, handle, store.size(layer["name"]), instruction, digest)
+            if scanner.layers[-1].get("truncated"):
+                limits.append(f"layer {index}: the declared file data exceeds the safety cap "
+                              f"({MAX_LAYER_DECLARED_BYTES / 1e9:g} GB), possible decompression bomb; its scan stopped early.")
         except (tarfile.TarError, OSError, EOFError, ValueError, ImageError) as exc:
             failure = {"index": index, "digest": digest, "created_by": instruction,
                        "error": f"layer could not be read ({type(exc).__name__}): "
@@ -566,6 +599,9 @@ def inspect(store, source: str, workdir: Path | None, saved: bool = False) -> di
 
 
 def save_image(reference: str, destination: Path) -> None:
+    if not IMAGE_REF.fullmatch(reference):
+        raise ImageError(f"{reference[:60]!r} is not a valid image reference (expected name[:tag] or name@sha256:...); "
+                         "if it is a file, check the path")
     if not shutil.which("docker"):
         raise ImageError("docker CLI not found; save the image yourself with `docker save -o image.tar NAME` "
                          "and pass the tar")
@@ -588,11 +624,7 @@ def main(argv: list[str]) -> int:
     target = Path(args.target).expanduser()
     workdir = None
     if not args.no_extract:
-        workdir = Path(args.out).expanduser() if args.out else Path(tempfile.mkdtemp(prefix="code-teardown-"))
-        if workdir.exists() and any(workdir.iterdir()):
-            print(f"error: work directory {workdir} is not empty", file=sys.stderr)
-            return 2
-        workdir.mkdir(parents=True, exist_ok=True)
+        workdir = empty_workdir(args.out)
     temp_tar = None
     try:
         saved = False

@@ -43,7 +43,8 @@ def test_scripts_named_in_skill_md_exist():
 def test_flags_in_docs_exist_in_scripts():
     scripts = "".join(p.read_text(encoding="utf-8") for p in (ROOT / "scripts").glob("*.py"))
     docs = SKILL + "".join(p.read_text(encoding="utf-8") for p in REFERENCES)
-    for flag in set(re.findall(r"`?(--[a-z][a-z-]+)", docs)):
+    external = {"--python"}            # flags of other tools mentioned in the docs (uv)
+    for flag in set(re.findall(r"`?(--[a-z][a-z-]+)", docs)) - external:
         assert f'"{flag}"' in scripts, f"{flag} is documented but no script defines it"
 
 

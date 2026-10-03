@@ -8,9 +8,15 @@ line number so the report can cite evidence.
 Python files are only parsed with ast: nothing from the analyzed tree is
 imported or executed, and setup.py is read as data.
 
-Usage: inventory.py PATH [--out FILE] [--full] [--max-files N]
+Usage: inventory.py PATH [--out FILE.json [--force]] [--full] [--max-files N]
 """
 from __future__ import annotations
+
+import sys
+
+if sys.version_info < (3, 11):  # keep this check above every other import
+    sys.exit(f"code-teardown needs Python 3.11 or newer (this is {sys.version_info.major}.{sys.version_info.minor}). "
+             "Try python3.12 or python3.11, or: uv run --python 3.12 <script>")
 
 import argparse
 import ast
@@ -25,7 +31,7 @@ from collections import defaultdict
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from _common import SECRET_NAME, dump  # noqa: E402
+from _common import SECRET_NAME, checked_output_path, dump  # noqa: E402
 
 SKIP_DIRS = {".git", ".hg", ".svn", "node_modules", ".venv", "venv", "env", "__pycache__",
              ".tox", ".nox", ".mypy_cache", ".pytest_cache", ".ruff_cache", "dist", "build",
@@ -41,11 +47,14 @@ CONFIG_LANGS = {
     ".yml": "YAML", ".yaml": "YAML", ".json": "JSON", ".toml": "TOML", ".ini": "INI", ".cfg": "INI",
 }
 MAX_FILE_BYTES = 2_000_000
+MAX_TOTAL_READ = 300_000_000      # bytes of file contents read in one run
+MAX_DIRS = 100_000
+SQL_SCAN_CHARS = 20_000           # longest string literal examined for SQL
 IMPORT_TO_DIST = {"yaml": "pyyaml", "PIL": "pillow", "cv2": "opencv-python", "sklearn": "scikit-learn",
                   "bs4": "beautifulsoup4", "dateutil": "python-dateutil", "dotenv": "python-dotenv",
                   "jwt": "pyjwt", "attr": "attrs", "serial": "pyserial", "Crypto": "pycryptodome"}
-SQL_RE = re.compile(r"\b(SELECT\s.+?\sFROM|INSERT\s+(?:OR\s+\w+\s+)?INTO|UPDATE\s+\w+\s+SET|DELETE\s+FROM)\b", re.I | re.S)
-TODO_RE = re.compile(r"#.*\b(TODO|FIXME|HACK|XXX)\b")
+SQL_RE = re.compile(r"\b(SELECT\s.{1,300}?\sFROM|INSERT\s+(?:OR\s+\w+\s+)?INTO|UPDATE\s+\w+\s+SET|DELETE\s+FROM)\b", re.I | re.S)
+TODO_RE = re.compile(r"\b(TODO|FIXME|HACK|XXX)\b")   # searched only after the first "#", see analyze_python
 
 
 def norm_dist(name: str) -> str:
@@ -172,21 +181,21 @@ class FileAnalyzer(ast.NodeVisitor):
 
     def visit_JoinedStr(self, node):
         literal = "".join(p.value for p in node.values if isinstance(p, ast.Constant) and isinstance(p.value, str))
-        if any(isinstance(p, ast.FormattedValue) for p in node.values) and SQL_RE.search(literal):
+        if any(isinstance(p, ast.FormattedValue) for p in node.values) and SQL_RE.search(literal[:SQL_SCAN_CHARS]):
             self.signal("sql_string_building", node)
         self.generic_visit(node)
 
     def visit_BinOp(self, node):
         left = node.left
         if isinstance(node.op, (ast.Mod, ast.Add)) and isinstance(left, ast.Constant) \
-                and isinstance(left.value, str) and SQL_RE.search(left.value):
+                and isinstance(left.value, str) and SQL_RE.search(left.value[:SQL_SCAN_CHARS]):
             self.signal("sql_string_building", node)
         self.generic_visit(node)
 
     def visit_Call(self, node):
         func = node.func
         if isinstance(func, ast.Attribute) and func.attr == "format" and isinstance(func.value, ast.Constant) \
-                and isinstance(func.value.value, str) and SQL_RE.search(func.value.value):
+                and isinstance(func.value.value, str) and SQL_RE.search(func.value.value[:SQL_SCAN_CHARS]):
             self.signal("sql_string_building", node)
         name = func.id if isinstance(func, ast.Name) else None
         dotted = ast.unparse(func) if isinstance(func, (ast.Attribute, ast.Name)) else ""
@@ -339,8 +348,8 @@ def parse_pyproject(rel: str, text: str) -> tuple[list[dict], list[dict], list[s
     notes: list[str] = []
     try:
         data = tomllib.loads(text)
-    except tomllib.TOMLDecodeError as exc:
-        return [], [], [f"{rel}: invalid TOML ({exc})"]
+    except (tomllib.TOMLDecodeError, RecursionError, MemoryError) as exc:
+        return [], [], [f"{rel}: invalid or too deeply nested TOML ({type(exc).__name__})"]
     deps, entries = [], []
 
     def add(requirement: str, group: str):
@@ -374,7 +383,7 @@ def parse_setup_py(rel: str, text: str) -> tuple[list[dict], list[dict], list[st
     deps, entries, notes = [], [], []
     try:
         tree = ast.parse(text)
-    except (SyntaxError, ValueError, RecursionError):
+    except (SyntaxError, ValueError, RecursionError, MemoryError):
         return deps, entries, [f"{rel}: could not be parsed"]
     for node in ast.walk(tree):
         if isinstance(node, ast.Call) and (getattr(node.func, "id", None) == "setup" or getattr(node.func, "attr", None) == "setup"):
@@ -385,7 +394,7 @@ def parse_setup_py(rel: str, text: str) -> tuple[list[dict], list[dict], list[st
                             name, spec = _spec_name(requirement)
                             deps.append({"name": name, "spec": spec, "pinned": "==" in spec, "path": rel,
                                          "line": kw.value.lineno, "group": "install_requires"})
-                    except (ValueError, TypeError):
+                    except (ValueError, TypeError, RecursionError, MemoryError):
                         notes.append(f"{rel}:{kw.value.lineno}: install_requires is computed dynamically, not resolved")
                 elif kw.arg == "entry_points":
                     try:
@@ -393,7 +402,7 @@ def parse_setup_py(rel: str, text: str) -> tuple[list[dict], list[dict], list[st
                         for item in (value.get("console_scripts", []) if isinstance(value, dict) else []):
                             entries.append({"kind": "console_script", "name": item.split("=")[0].strip(),
                                             "target": item.split("=", 1)[-1].strip(), "path": rel, "line": kw.value.lineno})
-                    except (ValueError, TypeError, AttributeError):
+                    except (ValueError, TypeError, AttributeError, RecursionError, MemoryError):
                         notes.append(f"{rel}:{kw.value.lineno}: entry_points is computed dynamically, not resolved")
     return deps, entries, notes
 
@@ -401,11 +410,14 @@ def parse_setup_py(rel: str, text: str) -> tuple[list[dict], list[dict], list[st
 def parse_package_json(rel: str, text: str) -> list[dict]:
     try:
         data = json.loads(text)
-    except json.JSONDecodeError:
+    except (json.JSONDecodeError, RecursionError, MemoryError):
+        return []
+    if not isinstance(data, dict):
         return []
     deps = []
     for group in ("dependencies", "devDependencies"):
-        for name, spec in (data.get(group) or {}).items():
+        table = data.get(group)
+        for name, spec in (table.items() if isinstance(table, dict) else []):
             deps.append({"name": name, "spec": str(spec), "pinned": bool(re.match(r"^\d", str(spec))),
                          "path": rel, "line": find_line(text, f'"{name}"'), "group": group})
     return deps
@@ -457,8 +469,13 @@ def inventory(root_arg: str, max_files: int = 20000, full: bool = False) -> dict
     files: list[Path] = [root] if single_file else []
     truncated = False
     skipped_dirs: set[str] = set()
+    dirs_seen = 0
     if not single_file:
         for dirpath, dirnames, filenames in os.walk(base):
+            dirs_seen += 1
+            if dirs_seen > MAX_DIRS:
+                truncated = True
+                break
             kept = []
             for d in sorted(dirnames):
                 if d in SKIP_DIRS or (d.startswith(".") and d != ".github"):
@@ -488,6 +505,8 @@ def inventory(root_arg: str, max_files: int = 20000, full: bool = False) -> dict
     ci_files, lint_files, lock_files, license_files, readme_files = [], [], [], [], []
     py_files: list[tuple[str, str]] = []
     total_bytes = 0
+    read_total = 0
+    budget_hit = False
     largest: list[tuple[int, str]] = []
 
     for path in files:
@@ -520,6 +539,11 @@ def inventory(root_arg: str, max_files: int = 20000, full: bool = False) -> dict
             "Makefile" if lowered == "makefile" else CODE_LANGS.get(suffix) or CONFIG_LANGS.get(suffix)
         if language is None:
             continue
+        if read_total + size > MAX_TOTAL_READ:
+            budget_hit = True
+            skipped_files.append({"path": rel, "reason": "read budget exhausted"})
+            continue
+        read_total += size
         text = read_text(path)
         if text is None:
             skipped_files.append({"path": rel, "reason": "binary or larger than 2 MB"})
@@ -530,20 +554,23 @@ def inventory(root_arg: str, max_files: int = 20000, full: bool = False) -> dict
         entry["files"] += 1
         entry["loc"] += loc
 
-        if language == "Dockerfile":
-            dockerfiles.append(parse_dockerfile(rel, text))
-        if re.fullmatch(r"requirements.*\.txt", lowered):
-            deps.extend(parse_requirements(rel, text))
-        elif lowered == "pyproject.toml":
-            d, e, n = parse_pyproject(rel, text)
-            deps.extend(d); entry_points.extend(e); dep_notes.extend(n)
-            if re.search(r"^\[tool\.(ruff|mypy|black|flake8|pylint)", text, re.M):
-                lint_files.append(rel)
-        elif lowered == "setup.py":
-            d, e, n = parse_setup_py(rel, text)
-            deps.extend(d); entry_points.extend(e); dep_notes.extend(n)
-        elif lowered == "package.json":
-            deps.extend(parse_package_json(rel, text))
+        try:
+            if language == "Dockerfile":
+                dockerfiles.append(parse_dockerfile(rel, text))
+            if re.fullmatch(r"requirements.*\.txt", lowered):
+                deps.extend(parse_requirements(rel, text))
+            elif lowered == "pyproject.toml":
+                d, e, n = parse_pyproject(rel, text)
+                deps.extend(d); entry_points.extend(e); dep_notes.extend(n)
+                if re.search(r"^\[tool\.(ruff|mypy|black|flake8|pylint)", text, re.M):
+                    lint_files.append(rel)
+            elif lowered == "setup.py":
+                d, e, n = parse_setup_py(rel, text)
+                deps.extend(d); entry_points.extend(e); dep_notes.extend(n)
+            elif lowered == "package.json":
+                deps.extend(parse_package_json(rel, text))
+        except Exception as exc:  # noqa: BLE001 - untrusted manifests may have any shape; never abort the run
+            dep_notes.append(f"{rel}: manifest has an unexpected structure and was skipped ({type(exc).__name__})")
         if suffix == ".py":
             py_files.append((rel, text))
 
@@ -556,7 +583,9 @@ def inventory(root_arg: str, max_files: int = 20000, full: bool = False) -> dict
 
     python["possibly_undeclared_deps"] = undeclared(python["external_imports"], deps)
     if truncated:
-        limits.append(f"File walk stopped at {max_files} files; everything below is partial.")
+        limits.append(f"File walk stopped at {max_files} files or {MAX_DIRS} directories; everything below is partial.")
+    if budget_hit:
+        limits.append(f"Stopped reading file contents at the read budget ({MAX_TOTAL_READ // 1_000_000} MB); the remaining files were not read.")
     if skipped_files:
         limits.append(f"{len(skipped_files)} file(s) skipped (binary or larger than 2 MB).")
     if parse_errors:
@@ -621,9 +650,14 @@ def analyze_python(base: Path, py_files: list[tuple[str, str]], parse_errors: li
             parse_errors.append({"path": rel, "line": getattr(exc, "lineno", None), "error": type(exc).__name__})
             continue
         analyzer = FileAnalyzer(rel, lines, is_test)
-        analyzer.visit(tree)
+        try:
+            analyzer.visit(tree)
+        except (RecursionError, MemoryError) as exc:      # absurdly nested expressions
+            parse_errors.append({"path": rel, "line": None, "error": type(exc).__name__})
+            continue
         for number, line in enumerate(lines, 1):
-            if TODO_RE.search(line):
+            hash_at = line.find("#")
+            if hash_at != -1 and TODO_RE.search(line, hash_at, hash_at + 2000):
                 analyzer.signals.append({"kind": "todo_comment", "path": rel, "line": number, "snippet": line.strip()[:120]})
         name, is_pkg = module_name(Path(rel), src_prefix)
         key = name or rel
@@ -748,16 +782,18 @@ def undeclared(external: dict[str, list[dict]], deps: list[dict]) -> dict:
 def main(argv: list[str]) -> int:
     parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     parser.add_argument("path")
-    parser.add_argument("--out", help="write JSON here instead of stdout")
+    parser.add_argument("--out", help="write JSON to this .json file instead of stdout")
+    parser.add_argument("--force", action="store_true", help="allow --out to overwrite an existing file")
     parser.add_argument("--full", action="store_true", help="include metrics for every function")
     parser.add_argument("--max-files", type=int, default=20000)
     args = parser.parse_args(argv[1:])
     if not Path(args.path).exists():
         print(f"error: {args.path} does not exist", file=sys.stderr)
         return 2
+    out_path = checked_output_path(args.out, ".json", args.force) if args.out else None
     data = inventory(args.path, args.max_files, args.full)
-    if args.out:
-        Path(args.out).write_text(json.dumps(data, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    if out_path:
+        out_path.write_text(json.dumps(data, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
         print(f"wrote {args.out} ({data['total_files']} files, {data['python']['stats']['functions']} functions)")
     else:
         dump(data)
