@@ -1,5 +1,7 @@
 """Validate SKILL.md frontmatter against the Agent Skills spec."""
 import re
+
+import pytest
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -21,11 +23,18 @@ def load():
     return parse_frontmatter((ROOT / "SKILL.md").read_text(encoding="utf-8"))
 
 
-def test_name_valid_and_matches_directory():
+def test_name_is_valid():
     name = load()["name"]
     assert len(name) <= 64
     assert NAME_RE.match(name)
-    assert name == ROOT.name
+    assert name == "code-teardown"
+
+
+def test_name_matches_directory_when_installed_under_its_own_name():
+    # The Agent Skills spec wants name == parent directory in the *installed* skill. A checkout can
+    # live anywhere (git clone <url> some-other-dir), so only enforce it where it is meaningful.
+    if ROOT.name != load()["name"]:
+        pytest.skip(f"checkout directory is {ROOT.name!r}; install it as {load()['name']!r} to use it as a skill")
 
 
 def test_description_within_spec_limit():
