@@ -1,0 +1,26 @@
+# Changelog
+
+All notable changes to this project are documented here. The format follows [Keep a Changelog](https://keepachangelog.com), and the project uses [Semantic Versioning](https://semver.org).
+
+## [0.1.0] - 2026-10-04
+
+First public release.
+
+### Added
+- An eight-step teardown pipeline for source repos, Python `.pyc` files and packages (wheel, zipapp, egg, sdist) and Docker images (`docker save` tar, extracted dir or image name).
+- `identify_artifact.py`, `inventory.py`, `extract_pyc.py`, `inspect_docker_image.py` and `render_report.py`, all standard library only.
+- An evidence-checked HTML report: every claim must cite a file and line, layer, history entry, config field or bytecode function, and is verified against the analyzed artifact. Light and dark themes, navigation and filters, English and Spanish, no external resources, hash-based Content-Security-Policy.
+- Context weighting (production service, automation script, library, learning) over six axes, with confidence ceilings that depend on how the code was recovered.
+- Plugin and marketplace manifests; a verified example report on `dbader/schedule`.
+- An eval harness (with-skill vs without-skill, objective grader, prompt-injection fixture) and a trigger-eval set.
+
+### Security
+- Static analysis only; `marshal` isolated in a child process; archive extraction with traversal and size guards.
+- Hardened against hostile artifacts: bounded regexes, contained deep nesting, scan budgets, validated image references, refusal to overwrite files without `--force`, secret redaction. See [SECURITY.md](SECURITY.md).
+
+### Known limitations
+- Automatic activation is unreliable in the trigger trial; naming the skill is the dependable way.
+- Decompiler integration is tested with stand-ins, not real `pycdc` or `decompyle3`.
+- JAR, APK, .NET and native binaries are declined (planned for v1).
+
+[0.1.0]: https://github.com/Hermida95/code-teardown/releases/tag/v0.1.0
