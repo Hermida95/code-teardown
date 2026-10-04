@@ -1,3 +1,4 @@
+import functools
 import io
 import json
 import shutil
@@ -221,10 +222,14 @@ def test_docker_missing_is_a_clean_error(tmp_path, monkeypatch, capsys):
     assert "docker CLI not found" in capsys.readouterr().err
 
 
+@functools.lru_cache(maxsize=1)
 def docker_available() -> bool:
     if not shutil.which("docker"):
         return False
-    return subprocess.run(["docker", "info"], capture_output=True).returncode == 0
+    try:        # a daemon that is starting or stopping can hang `docker info`; never wait for it
+        return subprocess.run(["docker", "info"], capture_output=True, timeout=8).returncode == 0
+    except subprocess.TimeoutExpired:
+        return False
 
 
 @pytest.mark.docker
@@ -258,3 +263,33 @@ def test_real_image_via_docker_import(tmp_path):
 def test_redact_hides_values_but_keeps_names(raw, leaked):
     out = redact(raw)
     assert leaked not in out and "<redacted>" in out
+
+
+@pytest.mark.docker
+@pytest.mark.skipif(not docker_available(), reason="Docker daemon not running")
+def test_real_multilayer_build_history_and_secret_redaction(tmp_path):
+    """A real `docker build` (COPY/ENV/USER only, so nothing is executed) checks Docker's own history format."""
+    ctx = tmp_path / "ctx"
+    (ctx / "app").mkdir(parents=True)
+    (ctx / "app" / "main.py").write_text("print('hi')\n")
+    (ctx / "requirements.txt").write_text("requests\n")
+    (ctx / "Dockerfile").write_text(
+        "FROM scratch\nCOPY app/ /app/\nCOPY requirements.txt /app/requirements.txt\n"
+        "ENV SERVICE_TOKEN=fake-token-value-123456\nUSER 1000\nENTRYPOINT [\"python\", \"app/main.py\"]\n")
+    tag = "code-teardown-test-multilayer:latest"
+    subprocess.run(["docker", "build", "-q", "-t", tag, str(ctx)], check=True, capture_output=True)
+    try:
+        proc = subprocess.run([sys.executable, str(SCRIPT), tag, "--out", str(tmp_path / "work")],
+                              capture_output=True, text=True, check=True)
+    finally:
+        subprocess.run(["docker", "rmi", tag], capture_output=True)
+    report = json.loads(proc.stdout)
+    assert report["totals"]["layers"] == 2
+    instructions = [h["instruction"] for h in report["history"]]
+    assert "COPY app/ /app/" in instructions
+    assert any(i.startswith("ENV SERVICE_TOKEN=<redacted>") for i in instructions)
+    assert "fake-token-value-123456" not in proc.stdout
+    kinds = {s["kind"] for s in report["signals"]}
+    assert {"secret_in_env", "secret_in_instruction"} <= kinds and "runs_as_root" not in kinds
+    assert report["config"]["user"] == "1000"
+    assert "app/main.py" in report["extracted"]["files"]
