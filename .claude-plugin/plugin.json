@@ -3,7 +3,7 @@
   "displayName": "code-teardown",
   "version": "0.1.0",
   "description": "Static teardown of source repos, Python .pyc files and Docker images: a critical verdict weighted by usage context, with cited evidence, as one self-contained HTML report.",
-  "author": { "name": "Miguel Hermida" },
+  "author": { "name": "Miguel Garcia Hermida" },
   "homepage": "https://github.com/Hermida95/code-teardown",
   "repository": "https://github.com/Hermida95/code-teardown",
   "license": "MIT",
