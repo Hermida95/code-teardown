@@ -29,3 +29,16 @@ Twenty realistic requests, ten that should activate the skill and ten near-misse
 ```bash
 python3 -m scripts.run_eval --eval-set evals/trigger-eval.json --skill-path . --runs-per-query 1
 ```
+
+### Comparing descriptions properly (`trigger_compare.py`)
+
+```bash
+python3 evals/trigger_compare.py --runner <skill-creator dir> --candidates evals/description-candidates.json \
+    --eval-set train.json --eval-set test.json
+```
+
+It runs each candidate description over each eval set and prints how often the skill activates for requests that should trigger it and for near-misses that should not. Pick on the train set, confirm on a different test set.
+
+**Why it exists:** `run_eval` counts an API failure as "not triggered". With an expired login every candidate scored 0%, which looks like a result but is not. The script first checks that `claude -p` really gets an answer from the model and stops with a clear error otherwise. Also keep in mind that the harness counts a skill as triggered only when it is Claude's **first** tool call: a request that makes Claude start by reading the target path counts as a miss.
+
+`description-candidates.json` holds the wordings that were compared: the shipped one, one that front-loads real request phrasings, and a short one. They were not validated, see the project history.
