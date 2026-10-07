@@ -1,0 +1,12 @@
+{
+  "name": "ai-evidence",
+  "description": "A marketplace with one plugin: ai-evidence, a scored, evidence-based look at whether an image was made or edited with AI.",
+  "owner": { "name": "Miguel Garcia Hermida" },
+  "plugins": [
+    {
+      "name": "ai-evidence",
+      "source": "./",
+      "description": "Weighs the evidence that an image was generated or edited with AI and reports scored evidence, not a verdict."
+    }
+  ]
+}
