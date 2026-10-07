@@ -1,5 +1,5 @@
 {
-  "name": "ai-evidence",
+  "name": "code-teardown",
   "description": "A marketplace with one plugin: ai-evidence, a scored, evidence-based look at whether an image was made or edited with AI.",
   "owner": { "name": "Miguel Garcia Hermida" },
   "plugins": [

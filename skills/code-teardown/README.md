@@ -87,12 +87,13 @@ claude plugin install code-teardown@code-teardown
 **As a plain skill** (copy it into your skills folder):
 
 ```bash
-git clone https://github.com/Hermida95/code-teardown ~/.claude/skills/code-teardown
+git clone https://github.com/Hermida95/code-teardown
+cp -R code-teardown/skills/code-teardown ~/.claude/skills/code-teardown
 ```
 
 Keep the folder name `code-teardown`: the Agent Skills format expects it to match the skill's name.
 
-To try it from a checkout without installing: `claude --plugin-dir ./code-teardown`.
+To try it from a checkout without installing: `claude --plugin-dir ./skills/code-teardown`.
 
 ## Use
 

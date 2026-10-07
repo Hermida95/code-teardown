@@ -1,0 +1,17 @@
+{
+  "name": "code-teardown",
+  "description": "Skills for working critically with code and with AI output: code-teardown (a static, evidence-backed verdict on code you did not write) and ai-evidence (scored evidence that an image was made or edited with AI).",
+  "owner": { "name": "Miguel Garcia Hermida" },
+  "plugins": [
+    {
+      "name": "code-teardown",
+      "source": "./skills/code-teardown",
+      "description": "Critical, evidence-backed teardown of source repos, .pyc files and Docker images."
+    },
+    {
+      "name": "ai-evidence",
+      "source": "./skills/ai-evidence",
+      "description": "Weighs the evidence that an image was generated or edited with AI and reports scored evidence, not a verdict."
+    }
+  ]
+}

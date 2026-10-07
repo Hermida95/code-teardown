@@ -33,11 +33,11 @@ The output is one self-contained HTML report (no external resources, dark mode, 
 As a Claude Code plugin:
 
 ```
-/plugin marketplace add Hermida95/ai-evidence
-/plugin install ai-evidence@ai-evidence
+/plugin marketplace add Hermida95/code-teardown
+/plugin install ai-evidence@code-teardown
 ```
 
-Or copy this folder into `~/.claude/skills/ai-evidence`. Requires Python 3.11+. Then ask, for example: *"use ai-evidence on ~/Downloads/foto.png"* or *"¿esta imagen está hecha con IA?"*. Naming the skill is the most reliable way to trigger it.
+(The repository holds several skills; its marketplace is named `code-teardown`.) Or copy `skills/ai-evidence` into `~/.claude/skills/ai-evidence`. Requires Python 3.11+. Then ask, for example: *"use ai-evidence on ~/Downloads/foto.png"* or *"¿esta imagen está hecha con IA?"*. Naming the skill is the most reliable way to trigger it.
 
 ## Honest limits
 
@@ -51,7 +51,7 @@ Or copy this folder into `~/.claude/skills/ai-evidence`. Requires Python 3.11+. 
 
 - [ ] Optional pixel module (error level analysis, noise and frequency statistics) behind Pillow/NumPy, off by default
 - [ ] **Text**: stylometric signals (sentence-length variation, stock phrases, structure) with deliberately low weights and a warning about false positives on non-native writers
-- [ ] **Code**: provenance signals (commit history shape, comment uniformity, hallucinated imports) as a companion to [code-teardown](https://github.com/Hermida95/code-teardown)
+- [ ] **Code**: provenance signals (commit history shape, comment uniformity, hallucinated imports) as a companion to [code-teardown](../code-teardown)
 - [ ] A labelled evaluation set and a calibration of the weights
 - [ ] HEIC/AVIF container parsing
 
