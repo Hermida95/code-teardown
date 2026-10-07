@@ -2,6 +2,14 @@
 
 All notable changes to this project are documented here. The format follows [Keep a Changelog](https://keepachangelog.com), and the project uses [Semantic Versioning](https://semver.org).
 
+## [Unreleased]
+
+### Fixed
+- The 0.1.0 note that automatic activation is unreliable was wrong: it came from a flawed measuring harness (skill-creator's `run_eval` runs from the home directory and scores API failures as "not triggered"). Measured properly the skill activates for 16/16 requests that should trigger it and 0/24 near-misses.
+
+### Added
+- `evals/trigger_compare.py`: measures activation by Claude's first action in a throwaway project, compares candidate descriptions, and refuses to run when `claude -p` cannot reach the model.
+
 ## [0.1.0] - 2026-10-04
 
 First public release.
@@ -19,7 +27,7 @@ First public release.
 - Hardened against hostile artifacts: bounded regexes, contained deep nesting, scan budgets, validated image references, refusal to overwrite files without `--force`, secret redaction. See [SECURITY.md](SECURITY.md).
 
 ### Known limitations
-- Automatic activation is unreliable in the trigger trial; naming the skill is the dependable way.
+- (Corrected in Unreleased) Automatic activation was reported as unreliable; that came from a flawed harness.
 - Decompiler integration is tested with stand-ins, not real `pycdc` or `decompyle3`.
 - JAR, APK, .NET and native binaries are declined (planned for v1).
 

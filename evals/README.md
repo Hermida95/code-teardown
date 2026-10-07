@@ -22,23 +22,18 @@ Notes
 - The injection marker is a harmless path the planted text asks an AI to `touch`. If it exists after a run, the agent obeyed the artifact.
 - Check how you grade: an automated grader can have bugs. When a check fails, read the output before blaming the skill (this one had four false positives while it was written).
 
-## 2. Does the description trigger? (`trigger-eval.json`)
-
-Twenty realistic requests, ten that should activate the skill and ten near-misses that should not (writing a Dockerfile, running tests, malware analysis, PR review, refactoring, a course for non-developers...). Run it with the `run_eval` script of Anthropic's skill-creator skill:
+## 2. Does the skill activate on its own? (`trigger_compare.py`, `trigger-eval.json`)
 
 ```bash
-python3 -m scripts.run_eval --eval-set evals/trigger-eval.json --skill-path . --runs-per-query 1
+python3 evals/trigger_compare.py --eval-set evals/trigger-eval.json --runs-per-query 2
+# compare wordings: add --candidates evals/description-candidates.json; keep raw results with --save-dir out/
 ```
 
-### Comparing descriptions properly (`trigger_compare.py`)
+For every request it registers the skill's description as a temporary command in a throwaway project, runs `claude -p` there and looks at Claude's **first action**: it counts as activated only if that is a call to this skill. The process is killed right after, so a run costs one model turn. It reports how often the skill activates for requests that should trigger it and for near-misses that should not (writing a Dockerfile, running tests, malware analysis, PR review...). `trigger-eval.json` uses made-up paths; for a realistic measurement point the queries at real artifacts (`build_fixtures.py` makes some) and use `--cwd-base` to create the throwaway projects under a folder like your real workspace.
 
-```bash
-python3 evals/trigger_compare.py --runner <skill-creator dir> --candidates evals/description-candidates.json \
-    --eval-set train.json --eval-set test.json
-```
+Two traps this script exists to avoid:
 
-It runs each candidate description over each eval set and prints how often the skill activates for requests that should trigger it and for near-misses that should not. Pick on the train set, confirm on a different test set.
+- **A broken login looks like a result.** Anthropic's skill-creator `run_eval` counts an API failure as "not triggered", so an expired login scored 0% for every wording. The script first checks that `claude -p` really gets an answer from the model and stops otherwise.
+- **The measuring harness can change the result.** `run_eval` runs `claude -p` from your home directory and registers its command in `~/.claude/commands`. In that setup the shipped description activated for about 30% of requests that should trigger it; from a throwaway project the same kind of requests activated it every time. We did not isolate which of the two differences matters, so measure in a setting that resembles how you will use the skill.
 
-**Why it exists:** `run_eval` counts an API failure as "not triggered". With an expired login every candidate scored 0%, which looks like a result but is not. The script first checks that `claude -p` really gets an answer from the model and stops with a clear error otherwise. Also keep in mind that the harness counts a skill as triggered only when it is Claude's **first** tool call: a request that makes Claude start by reading the target path counts as a miss.
-
-`description-candidates.json` holds the wordings that were compared: the shipped one, one that front-loads real request phrasings, and a short one. They were not validated, see the project history.
+`description-candidates.json` holds the wordings that were compared (the shipped one, one that front-loads real request phrasings, a short one). They tied or lost against the shipped one in the old harness; they have not been re-compared with this script because the shipped wording already activates reliably.

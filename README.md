@@ -160,7 +160,7 @@ This is a **static** analyzer for learning, not a security tool. See [SECURITY.m
 
 ## Limitations
 
-- Automatic activation is not reliable: in a small trial (20 requests, one run each) Claude used the skill unprompted for only a few of the requests that should trigger it, and never for the ones that should not. Naming the skill is the dependable way.
+- Activation depends on what else you have installed, and on how it is measured. With the skill registered in a project next to about 100 other skills, Claude's first action was this skill for 16 of 16 requests that should trigger it (eight phrasings that never name it, two runs each) and for 0 of 24 near-misses (PR review, security review, running tests, refactoring, malware analysis...); where a more specific skill exists it picks that one. That is a small sample on one machine ([how it was measured](evals/README.md)); if it ever misses, name the skill.
 - Requires Python 3.11+. Older interpreters get a clear message instead of a traceback.
 - A `.pyc` from a different Python than the one running the scripts can only be read for its header and strings unless a decompiler is installed. Decompiler integration is exercised with stand-in tools in tests, not yet with real `pycdc` or `decompyle3` builds.
 - Import graph and function metrics are Python-only. Other languages get size, manifests and entry points, and the model reads the code directly with lower confidence.
