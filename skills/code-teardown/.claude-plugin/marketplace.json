@@ -1,5 +1,5 @@
 {
-  "name": "code-teardown",
+  "name": "second-opinion",
   "description": "A marketplace with one plugin: code-teardown, a static, evidence-backed teardown of repos, .pyc files and Docker images.",
   "owner": {
     "name": "Miguel Garcia Hermida"

@@ -4,8 +4,8 @@
   "version": "0.1.0",
   "description": "Weighs the evidence that an image was generated or edited with AI: every item gets a 0-10 score and a trust weight, combined into scored answers with confidence, as one self-contained HTML report.",
   "author": { "name": "Miguel Garcia Hermida" },
-  "homepage": "https://github.com/Hermida95/code-teardown/tree/main/skills/ai-evidence",
-  "repository": "https://github.com/Hermida95/code-teardown",
+  "homepage": "https://github.com/Hermida95/second-opinion-skills/tree/main/skills/ai-evidence",
+  "repository": "https://github.com/Hermida95/second-opinion-skills",
   "license": "MIT",
   "keywords": ["ai-detection", "provenance", "c2pa", "images", "content-credentials", "forensics"]
 }

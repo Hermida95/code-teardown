@@ -31,4 +31,4 @@ First public release.
 - Decompiler integration is tested with stand-ins, not real `pycdc` or `decompyle3`.
 - JAR, APK, .NET and native binaries are declined (planned for v1).
 
-[0.1.0]: https://github.com/Hermida95/code-teardown/releases/tag/v0.1.0
+[0.1.0]: https://github.com/Hermida95/second-opinion-skills/releases/tag/v0.1.0

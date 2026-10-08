@@ -33,11 +33,11 @@ The output is one self-contained HTML report (no external resources, dark mode, 
 As a Claude Code plugin:
 
 ```
-/plugin marketplace add Hermida95/code-teardown
-/plugin install ai-evidence@code-teardown
+/plugin marketplace add Hermida95/second-opinion-skills
+/plugin install ai-evidence@second-opinion
 ```
 
-(The repository holds several skills; its marketplace is named `code-teardown`.) Or copy `skills/ai-evidence` into `~/.claude/skills/ai-evidence`. Requires Python 3.11+. Then ask, for example: *"use ai-evidence on ~/Downloads/foto.png"* or *"¿esta imagen está hecha con IA?"*. Naming the skill is the most reliable way to trigger it.
+(The repository holds several skills; its marketplace is named `second-opinion`.) Or copy `skills/ai-evidence` into `~/.claude/skills/ai-evidence`. Requires Python 3.11+. Then ask, for example: *"use ai-evidence on ~/Downloads/foto.png"* or *"¿esta imagen está hecha con IA?"*. Naming the skill is the most reliable way to trigger it.
 
 ## Honest limits
 

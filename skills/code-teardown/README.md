@@ -8,7 +8,7 @@
 
 Point it at a repo, a `.pyc` or a Docker image. Get what is good, what is bad and what *depends on how you will use it*, as one self-contained HTML report.
 
-[![tests](https://github.com/Hermida95/code-teardown/actions/workflows/tests.yml/badge.svg)](https://github.com/Hermida95/code-teardown/actions/workflows/tests.yml)
+[![tests](https://github.com/Hermida95/second-opinion-skills/actions/workflows/tests.yml/badge.svg)](https://github.com/Hermida95/second-opinion-skills/actions/workflows/tests.yml)
 [![license: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![python 3.11+](https://img.shields.io/badge/python-3.11%2B-blue.svg)](#install)
 [![dependencies: none](https://img.shields.io/badge/dependencies-none-brightgreen.svg)](#development)
@@ -80,15 +80,15 @@ Requirements: Python 3.11+. Optional: [`pycdc`](https://github.com/zrax/pycdc) o
 **As a plugin** (updates with the marketplace):
 
 ```bash
-claude plugin marketplace add Hermida95/code-teardown
-claude plugin install code-teardown@code-teardown
+claude plugin marketplace add Hermida95/second-opinion-skills
+claude plugin install code-teardown@second-opinion
 ```
 
 **As a plain skill** (copy it into your skills folder):
 
 ```bash
-git clone https://github.com/Hermida95/code-teardown
-cp -R code-teardown/skills/code-teardown ~/.claude/skills/code-teardown
+git clone https://github.com/Hermida95/second-opinion-skills
+cp -R second-opinion-skills/skills/code-teardown ~/.claude/skills/code-teardown
 ```
 
 Keep the folder name `code-teardown`: the Agent Skills format expects it to match the skill's name.
