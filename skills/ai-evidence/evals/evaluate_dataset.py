@@ -43,6 +43,7 @@ SCRIPTS = Path(__file__).resolve().parent.parent / "scripts"
 sys.path.insert(0, str(SCRIPTS))
 import analyze_image as ai  # noqa: E402
 import score_evidence as se  # noqa: E402
+from _common import clean_quote  # noqa: E402
 
 LABELS = ("real", "generated", "edited")
 ALIASES = {"real": "real", "human": "real", "authentic": "real", "generated": "generated", "ai": "generated",
@@ -157,8 +158,16 @@ def discover(dataset: Path, manifest: Path | None, max_files: int) -> tuple[list
 
 def stripped_copy(source: Path, directory: Path) -> Path:
     """Re-encode like a messaging app: no metadata, longest edge 1600, JPEG quality 80."""
+    import warnings
     from PIL import Image
-    with Image.open(source) as im:
+    Image.MAX_IMAGE_PIXELS = 50_000_000
+    with warnings.catch_warnings():
+        warnings.simplefilter("error", Image.DecompressionBombWarning)
+        im = Image.open(source)
+        if im.size[0] * im.size[1] > Image.MAX_IMAGE_PIXELS:
+            raise ValueError("image has too many pixels to re-encode safely")
+        im.draft("RGB", (1600, 1600))          # JPEG only: decode at a reduced size when it is going to shrink anyway
+    with im:
         im = im.convert("RGB")
         if max(im.size) > 1600:
             scale = 1600 / max(im.size)
@@ -214,6 +223,20 @@ def evaluate(rows: list[dict], conditions: list[str], use_pixels: bool, drop_fil
 
 # --- summaries -------------------------------------------------------------------------------
 
+def content_sha(path: Path) -> str | None:
+    """SHA-256 in 1 MB chunks. Files over the size cap are never read: they get None and a split from their path."""
+    try:
+        if path.stat().st_size > MAX_FILE_BYTES:
+            return None
+        digest = hashlib.sha256()
+        with path.open("rb") as handle:
+            for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+                digest.update(chunk)
+        return digest.hexdigest()
+    except OSError:
+        return None
+
+
 def attach_splits(rows: list[dict], results: list[dict]) -> None:
     by_path = {r["path"]: r for r in rows}
     original_sha = {}
@@ -222,8 +245,8 @@ def attach_splits(rows: list[dict], results: list[dict]) -> None:
             original_sha[entry["path"]] = entry["sha256"]
     for entry in results:
         row = by_path[entry["path"]]
-        sha = original_sha.get(entry["path"]) or hashlib.sha256(row["abs"].read_bytes()).hexdigest()
-        entry["split"] = row["split"] or split_for(sha)
+        sha = original_sha.get(entry["path"]) or content_sha(row["abs"])
+        entry["split"] = row["split"] or split_for(sha or hashlib.sha256(entry["path"].encode("utf-8", "replace")).hexdigest())
         entry["content_sha256"] = sha
 
 
@@ -300,7 +323,7 @@ def duplicates(results: list[dict]) -> list[dict]:
     seen: dict = defaultdict(set)
     paths: dict = defaultdict(set)
     for e in results:
-        if e["condition"] == "original" and "content_sha256" in e:
+        if e["condition"] == "original" and e.get("content_sha256"):
             seen[e["content_sha256"]].add(e["label"])
             paths[e["content_sha256"]].add(e["path"])
     return [{"paths": sorted(paths[sha]), "labels": sorted(labels)} for sha, labels in seen.items() if len(paths[sha]) > 1]
@@ -389,6 +412,14 @@ TEXT = {
 }
 
 
+def cell(value) -> str:
+    """Make text that came from file names, folder names or a manifest safe for a Markdown line or table cell."""
+    text = clean_quote(str(value), 120)
+    for char, escaped in (("&", "&amp;"), ("<", "&lt;"), (">", "&gt;"), ("|", "\\|"), ("`", "'"), ("[", "\\["), ("]", "\\]")):
+        text = text.replace(char, escaped)
+    return text
+
+
 def pct(r: dict) -> str:
     if r["n"] == 0:
         return "n/a"
@@ -403,11 +434,11 @@ def render_markdown(summary: dict, problems: list[str], lang: str) -> str:
     warnings = list(problems)
     for dup in summary["duplicates"]:
         flag = t["dup_labels"] if len(dup["labels"]) > 1 else ""
-        warnings.append(f"{t['dup']}{flag}: {', '.join(dup['paths'][:4])}")
+        warnings.append(f"{t['dup']}{flag}: {', '.join(cell(p) for p in dup['paths'][:4])}")
     for e in summary["errors"]:
-        warnings.append(f"{e['path']}: {e['error']}")
+        warnings.append(f"{cell(e['path'])}: {cell(e['error'])}")
     if warnings:
-        out += ["", f"### {t['warnings']}", ""] + [f"- {w}" for w in warnings[:40]]
+        out += ["", f"### {t['warnings']}", ""] + [f"- {cell(w)}" for w in warnings[:40]]
     for condition, block in summary["conditions"].items():
         out += ["", f"## {t['cond'][condition]}"]
         for claim, per_split in block["claims"].items():
@@ -430,7 +461,7 @@ def render_markdown(summary: dict, problems: list[str], lang: str) -> str:
             out += [f"| {label} | " + " | ".join(str(bands[label].get(n, 0)) for n in names) + " |" for label in LABELS]
         if block["false_positive_by_source"]:
             out += ["", f"### {t['sources']}", "", f"| {t['source']} | " + " | ".join(t["claim"].values()) + " |", "| --- | --- | --- |"]
-            out += [f"| {src} | " + " | ".join(pct(v[c]) for c in CONTRASTS) + " |" for src, v in block["false_positive_by_source"].items()]
+            out += [f"| {cell(src)} | " + " | ".join(pct(v[c]) for c in CONTRASTS) + " |" for src, v in block["false_positive_by_source"].items()]
         meta = block["generated_detection_by_metadata"]
         out += ["", f"### {t['meta']}", "", "| | |", "| --- | --- |",
                 f"| {t['with_meta']} | {pct(meta['with_metadata'])} |", f"| {t['without_meta']} | {pct(meta['without_metadata'])} |"]
