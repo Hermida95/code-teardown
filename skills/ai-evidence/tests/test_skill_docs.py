@@ -46,7 +46,7 @@ def test_visual_example_in_skill_is_accepted_by_the_validator(tmp_path):
 
 def test_kinds_and_caps_in_docs_match_the_code():
     for kind, cap in se.VISUAL_CAPS.items():
-        assert f"`{kind}`" in SKILL + (ROOT / "references/visual-checklist.md").read_text(encoding="utf-8")
+        assert f"`{kind}`" in SKILL + (ROOT / "references/visual-checklist.md").read_text(encoding="utf-8") + (ROOT / "references/text-signals.md").read_text(encoding="utf-8")
     scoring = (ROOT / "references/scoring.md").read_text(encoding="utf-8")
     for kind in ("known_watermark", "anatomy_text_errors", "physics_lighting", "natural_cues", "texture_style"):
         assert f"`{kind}` {se.VISUAL_CAPS[kind]}" in scoring
@@ -69,6 +69,16 @@ def test_pixel_module_flags_and_ids_are_documented():
     docs = (ROOT / "references/pixel-signals.md").read_text(encoding="utf-8")
     assert not {i for i in ids if f"`{i}`" not in docs}
     assert "analyze_pixels.py" in SKILL and "--pixels" in SKILL and "pixel-signals.md" in SKILL
+
+
+def test_text_module_is_documented_and_its_flags_exist():
+    helptext = subprocess.run([sys.executable, str(ROOT / "scripts" / "analyze_text.py"), "--help"], capture_output=True, text=True).stdout
+    assert "--out" in helptext and "--force" in helptext
+    source = (ROOT / "scripts/analyze_text.py").read_text(encoding="utf-8")
+    ids = set(re.findall(r'ev\("(tx-[a-z-]+)"', source))
+    docs = (ROOT / "references/text-signals.md").read_text(encoding="utf-8")
+    assert len(ids) >= 12 and not {i for i in ids if f"`{i}`" not in docs}
+    assert "analyze_text.py" in SKILL and "text-signals.md" in SKILL
 
 
 def test_pixel_cap_is_the_same_in_the_analyzer_and_the_scorer_and_in_the_docs():

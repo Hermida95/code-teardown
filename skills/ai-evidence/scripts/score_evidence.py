@@ -6,7 +6,7 @@ the model saw when it looked at the image. Each evidence item has
 
     score   0..10   0 = this points to "not AI", 10 = this points to "AI"
     weight  0..1    how much the item can be trusted (0 = informative only, >=0.9 = conclusive)
-    claim   "generated" (made by a model) or "ai_edited" (a real image changed by a model)
+    claim   "generated" (made by a model) or "ai_edited" (a real image or text changed by a model)
 
 The two claims are scored separately. The score is a weighted mean of the items, with two rules
 on top: a conclusive item decides the score, and two conclusive items that disagree make the
@@ -39,7 +39,13 @@ LANGUAGES = ["es", "en"]
 # A visual impression is the least reliable kind of evidence, so the weight is capped by kind
 # no matter what the model wrote. A recognisable vendor watermark is the one strong exception.
 VISUAL_CAPS = {"known_watermark": 0.6, "anatomy_text_errors": 0.35, "physics_lighting": 0.3,
-               "natural_cues": 0.3, "texture_style": 0.25, "composition": 0.2, "other": 0.2}
+               "natural_cues": 0.3, "texture_style": 0.25, "composition": 0.2, "other": 0.2,
+               # what the model notices when it reads a text
+               "fabricated_references": 0.35, "voice_and_specificity": 0.3, "generic_content": 0.25, "text_other": 0.2}
+
+# Weak signals of one kind are correlated, so adding them up must not buy confidence. Per group and claim,
+# the total weight is scaled down to the cap. Stock phrases, dashes and sentence rhythm are all "style".
+GROUP_CAPS = {"style": 0.5, "visual": 1.0, "pixels": 0.5}
 
 # Pixel measurements come from heuristics that are not calibrated on real images, so whatever
 # analyze_pixels.py writes, no item counts for more than this.
@@ -52,6 +58,9 @@ UI = {
     "es": {
         "title": "Informe de evidencias de IA", "file": "Archivo", "format": "Formato", "size": "Tamaño", "generated_on": "Generado",
         "generated": "¿Generada por IA?", "ai_edited": "¿Editada con IA?",
+        "generated_text": "¿Escrito por IA?", "ai_edited_text": "¿Mezclado o pulido con IA?", "text_measurements": "Medidas del texto",
+        "scaled": "peso reducido de {a} a {b}: tope del grupo «{g}»", "words": "palabras",
+        "disclaimer_text": "En texto es todavía menos fiable: quien escribe en un segundo idioma, los registros formales y los textos muy editados se marcan mucho más que la escritura nativa e informal. No uses este informe para acusar a nadie de haber usado IA, por ejemplo en un trabajo escolar o académico.",
         "scale": "0 = no es IA · 10 = es IA", "lo": "no es IA", "hi": "es IA", "confidence": "Confianza",
         "conf": {"high": "alta", "medium": "media", "low": "baja", "very_low": "muy baja"},
         "band": {"none": "Sin indicios de IA", "low": "Pocos indicios", "mixed": "Indicios mixtos",
@@ -61,7 +70,7 @@ UI = {
             "insufficient": "Hay muy poca evidencia con peso. La nota que se ve es solo orientativa y no permite concluir nada.",
             "conflict": "Hay pruebas de peso alto que apuntan en sentidos opuestos. No se promedian: hay que revisarlo a mano.",
             "conclusive": "Una prueba de peso alto decide la nota. Sigue siendo una declaración en el archivo que alguien pudo falsificar o dejar sin querer.",
-            "none": "Las pruebas con peso apuntan a una imagen no generada por IA. No lo descarta: faltan comprobaciones.",
+            "none": "Las pruebas con peso apuntan a un contenido no generado por IA. No lo descarta: faltan comprobaciones.",
             "low": "Algo apunta a IA, pero con poco peso. Más cerca de «no» que de «sí».",
             "mixed": "Las pruebas se reparten en ambos sentidos. No se puede inclinar la balanza.",
             "strong": "Varias pruebas apuntan a IA con peso razonable. Es un indicio fuerte, no una prueba.",
@@ -69,19 +78,22 @@ UI = {
         },
         "evidence": "Evidencias", "no_evidence": "No hay evidencias para esta pregunta.",
         "weight": "Peso", "share": "Cuota", "where": "Dónde", "score": "Nota",
-        "src": {"metadata": "metadatos", "structure": "estructura", "filename": "nombre", "visual": "visual", "pixels": "píxeles"},
+        "src": {"metadata": "metadatos", "structure": "estructura", "filename": "nombre", "visual": "visual", "pixels": "píxeles", "residue": "restos de IA", "style": "estilo"},
         "measurements": "Medidas de píxeles", "info": "informativa (no puntúa)", "not_checked": "Qué no se ha podido comprobar", "limits": "Límites",
         "method": "Cómo se calcula",
         "method_text": "Cada evidencia tiene una nota de 0 (apunta a «no es IA») a 10 (apunta a «es IA») y un peso de 0 a 1 que dice cuánto se puede fiar de ella. "
                        "La nota final es la media ponderada por peso. Una evidencia de peso 0,9 o más decide por sí sola, y si dos de ellas se contradicen no se promedian: se marca como contradictoria. "
                        "La confianza depende de cuánto peso total hay, no de la nota.",
-        "disclaimer": "Esto es un conjunto de indicios, no una prueba ni un veredicto. Ningún análisis automático distingue con certeza una imagen generada de una real, "
+        "disclaimer": "Esto es un conjunto de indicios, no una prueba ni un veredicto. Ningún análisis automático distingue con certeza un contenido generado de uno real, "
                       "y los metadatos pueden faltar, copiarse o falsificarse. No uses este informe para acusar a nadie.",
         "visual_note": "Observación visual del modelo", "clamped": "peso limitado de {a} a {b}",
     },
     "en": {
         "title": "AI evidence report", "file": "File", "format": "Format", "size": "Size", "generated_on": "Generated",
         "generated": "Generated by AI?", "ai_edited": "Edited with AI?",
+        "generated_text": "Written by AI?", "ai_edited_text": "Mixed with or polished by AI?", "text_measurements": "Text measurements",
+        "scaled": "weight reduced from {a} to {b}: cap of the \"{g}\" group", "words": "words",
+        "disclaimer_text": "For text it is even less reliable: non-native writers, formal registers and heavily edited text are flagged far more often than native, informal writing. Do not use this report to accuse anyone of using AI, for example in schoolwork or academic work.",
         "scale": "0 = not AI · 10 = AI", "lo": "not AI", "hi": "AI", "confidence": "Confidence",
         "conf": {"high": "high", "medium": "medium", "low": "low", "very_low": "very low"},
         "band": {"none": "No signs of AI", "low": "Few signs", "mixed": "Mixed signs",
@@ -91,7 +103,7 @@ UI = {
             "insufficient": "There is very little weighty evidence. The score shown is only a hint and supports no conclusion.",
             "conflict": "Heavy evidence points in opposite directions. It is not averaged: review it by hand.",
             "conclusive": "One heavy item decides the score. It is still a statement inside the file that someone could have forged or left in by accident.",
-            "none": "The weighty evidence points to an image not made by AI. It does not rule it out: some checks were not possible.",
+            "none": "The weighty evidence points to content not made by AI. It does not rule it out: some checks were not possible.",
             "low": "Something points to AI, but with little weight. Closer to \"no\" than to \"yes\".",
             "mixed": "The evidence splits both ways. The balance cannot be tipped.",
             "strong": "Several items point to AI with reasonable weight. A strong indication, not proof.",
@@ -99,13 +111,13 @@ UI = {
         },
         "evidence": "Evidence", "no_evidence": "There is no evidence for this question.",
         "weight": "Weight", "share": "Share", "where": "Where", "score": "Score",
-        "src": {"metadata": "metadata", "structure": "structure", "filename": "file name", "visual": "visual", "pixels": "pixels"},
+        "src": {"metadata": "metadata", "structure": "structure", "filename": "file name", "visual": "visual", "pixels": "pixels", "residue": "AI residue", "style": "style"},
         "measurements": "Pixel measurements", "info": "informative (not scored)", "not_checked": "What could not be checked", "limits": "Limits",
         "method": "How it is computed",
         "method_text": "Each piece of evidence has a score from 0 (points to \"not AI\") to 10 (points to \"AI\") and a weight from 0 to 1 saying how far it can be trusted. "
                        "The final score is the weight-weighted mean. An item with weight 0.9 or more decides on its own, and two that contradict each other are not averaged: the result is marked as conflicting. "
                        "Confidence depends on how much total weight exists, not on the score.",
-        "disclaimer": "This is a set of indications, not proof or a verdict. No automatic analysis tells a generated image from a real one with certainty, "
+        "disclaimer": "This is a set of indications, not proof or a verdict. No automatic analysis tells generated content from real content with certainty, "
                       "and metadata can be missing, copied or forged. Do not use this report to accuse anyone.",
         "visual_note": "Visual observation by the model", "clamped": "weight capped from {a} to {b}",
     },
@@ -211,6 +223,18 @@ def load_pixels(path: str) -> dict:
             "coverage": doc.get("coverage", {})}
 
 
+def apply_group_caps(items: list[dict]) -> None:
+    """Scale down groups of weak, correlated items so that their sum cannot exceed the group's cap."""
+    for source, cap in GROUP_CAPS.items():
+        for claim in CLAIMS:
+            group = [e for e in items if e["source"] == source and e["claim"] == claim and e["weight"] > 0]
+            total = sum(e["weight"] for e in group)
+            if total > cap:
+                for e in group:
+                    e["scaled_from"] = round(e["weight"], 4)
+                    e["weight"] = e["weight"] * cap / total
+
+
 def band_for(score: float) -> str:
     for upper, band in BANDS:
         if score < upper:
@@ -283,15 +307,20 @@ def esc(value) -> str:
     return html.escape(str(value), quote=True)
 
 
-def card(claim: str, agg: dict, lang: str) -> str:
+def claim_label(u: dict, claim: str, modality: str) -> str:
+    return u.get(f"{claim}_text", u[claim]) if modality == "text" else u[claim]
+
+
+def card(claim: str, agg: dict, lang: str, modality: str = "image") -> str:
     u = UI[lang]
+    label = claim_label(u, claim, modality)
     band = agg["band"]
     off = band in ("insufficient", "conflict") or agg["score"] is None
     score = agg["score"]
     shown = "—" if score is None else f"{score:.1f}"
     marker = "" if score is None else f'<i style="left:{score * 10:.1f}%"></i>'
     reading_key = agg["status"] if agg["status"] in ("insufficient", "conflict", "conclusive") else band
-    return (f'<section class="card" aria-label="{esc(u[claim])}"><p class="q">{esc(u[claim])}</p>'
+    return (f'<section class="card" aria-label="{esc(label)}"><p class="q">{esc(label)}</p>'
             f'<p class="big" style="color:var(--{"insufficient" if off and band == "insufficient" else band})">{shown}<small> / 10</small></p>'
             f'<span class="badge" style="background:var(--{band}-bg);color:var(--{band})">{esc(u["band"][band])}</span>'
             f'<div class="scale{" off" if off else ""}" role="img" aria-label="{esc(u["scale"])}">{marker}</div>'
@@ -314,6 +343,9 @@ def evidence_table(claim: str, items: list[dict], agg: dict, lang: str) -> str:
         if "clamped_from" in e:
             note = u["clamped"].format(a=format(e["clamped_from"], "g"), b=format(e["weight"], "g"))
             clamp = f'<div class="w">{esc(note)}</div>'
+        if "scaled_from" in e:
+            note = u["scaled"].format(a=format(e["scaled_from"], ".2f"), b=format(e["weight"], ".2f"), g=e["source"])
+            clamp += f'<div class="w">{esc(note)}</div>'
         weight_cell = (esc(u["info"]) if informative else
                        f'{e["weight"]:.2f}<span class="bar"><b style="width:{shares.get(e["id"], 0) * 100:.0f}%"></b></span>'
                        f'<div class="w">{shares.get(e["id"], 0) * 100:.0f}%</div>')
@@ -330,17 +362,18 @@ def evidence_table(claim: str, items: list[dict], agg: dict, lang: str) -> str:
 def render(report: dict, lang: str) -> str:
     u = UI[lang]
     f = report["file"]
-    cards = "".join(card(c, report["assessment"][c], lang) for c in CLAIMS)
-    sections = "".join(f'<h2>{esc(u[c])} · {esc(u["evidence"])}</h2>'
+    modality = f.get("modality", "image")
+    cards = "".join(card(c, report["assessment"][c], lang, modality) for c in CLAIMS)
+    sections = "".join(f'<h2>{esc(claim_label(u, c, modality))} · {esc(u["evidence"])}</h2>'
                        f'{evidence_table(c, [e for e in report["evidence"] if e["claim"] == c], report["assessment"][c], lang)}'
                        for c in CLAIMS)
     measured = "".join(f"<tr><td>{esc(loc(m['label'], lang))}</td><td><code>{esc(m['value'])}</code></td></tr>"
                        for m in report.get("measurements", []))
-    measurements = (f'<h2>{esc(u["measurements"])}</h2><div class="scroll"><table><tbody>{measured}</tbody></table></div>'
+    measurements = (f'<h2>{esc(u["text_measurements" if modality == "text" else "measurements"])}</h2><div class="scroll"><table><tbody>{measured}</tbody></table></div>'
                     if measured else "")
     not_checked = "".join(f"<li>{esc(loc(x, lang))}</li>" for x in report["coverage"].get("not_checked", []))
     limits = "".join(f"<li>{esc(loc(x, lang))}</li>" for x in report["limits"])
-    size = f"{f['width']}×{f['height']}" if f.get("width") else "?"
+    size = (f"· {f.get('words', '?')} {u['words']}" if modality == "text" else f"{f['width']}×{f['height']}" if f.get("width") else "?")
     return (f'<!doctype html><html lang="{lang}"><head><meta charset="utf-8">'
             f'<meta name="viewport" content="width=device-width,initial-scale=1">'
             f'<meta http-equiv="Content-Security-Policy" content="default-src \'none\'; style-src \'unsafe-inline\'; img-src data:">'
@@ -351,7 +384,8 @@ def render(report: dict, lang: str) -> str:
             f'<div class="cards">{cards}</div>{sections}{measurements}'
             f'<h2>{esc(u["not_checked"])}</h2><ul>{not_checked}</ul><h2>{esc(u["limits"])}</h2><ul>{limits}</ul>'
             f'<h2>{esc(u["method"])}</h2><p class="note">{esc(u["method_text"])}</p>'
-            f'<p class="note" style="margin-top:16px"><b>{esc(u["disclaimer"])}</b></p></main></body></html>')
+            f'<p class="note" style="margin-top:16px"><b>{esc(u["disclaimer"])}</b></p>'
+            + (f'<p class="note" style="margin-top:12px"><b>{esc(u["disclaimer_text"])}</b></p>' if modality == "text" else "") + '</main></body></html>')
 
 
 def build_report(evidence_doc: dict, visual: list[dict], pixels: dict | None = None) -> dict:
@@ -361,14 +395,15 @@ def build_report(evidence_doc: dict, visual: list[dict], pixels: dict | None = N
     items += visual
     coverage = dict(evidence_doc.get("coverage", {}))
     limits = list(evidence_doc.get("limits", []))
-    measurements: list = []
+    measurements: list = list(evidence_doc.get("measurements", []))
     if pixels is not None:
         items += pixels["evidence"]
-        measurements = pixels["measurements"]
+        measurements += pixels["measurements"]
         # the pixel module ran, so the "not run" notes from step 1 no longer apply
         coverage["not_checked"] = [x for x in coverage.get("not_checked", []) if not (isinstance(x, dict) and x.get("id") == "pixels")]
         coverage["checked"] = list(coverage.get("checked", [])) + pixels["coverage"].get("checked", [])
         limits = [x for x in limits if not (isinstance(x, dict) and x.get("id") == "pixels")] + pixels["limits"]
+    apply_group_caps(items)
     ids = [e["id"] for e in items]
     if len(ids) != len(set(ids)):
         fail("evidence ids must be unique (rename the visual observations that repeat an id)")

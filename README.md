@@ -13,7 +13,7 @@ Built for [Claude Code](https://claude.com/claude-code) and any client that supp
 | | Skill | The question it answers |
 | --- | --- | --- |
 | 🔍 | [**code-teardown**](skills/code-teardown) | *"Is this code any good, and should I build on it?"* A critical teardown of a repo, a `.pyc` file or a Docker image: what is well built, what is not, and what depends on how you will use it. Every claim cites `file:line` and is checked against the real files. |
-| 🧾 | [**ai-evidence**](skills/ai-evidence) | *"Was this made or edited with AI?"* Every signal in an image (generator records, Content Credentials, EXIF, dimensions, what the model sees) gets a **0-10 score** and a **trust weight**; they are combined into two scored answers, *generated* and *edited with AI*, with a confidence level. |
+| 🧾 | [**ai-evidence**](skills/ai-evidence) | *"Was this made or edited with AI?"* Every signal in an image or a text (generator records, Content Credentials, EXIF, pasted chatbot residue, style, what the model sees) gets a **0-10 score** and a **trust weight**; they are combined into two scored answers, *made by AI* and *edited or polished with AI*, with a confidence level. Text is much weaker ground than images, and the skill says so. |
 
 ### What a result looks like
 
@@ -74,7 +74,7 @@ Links to the old repository URL redirect here.
 
 ## Roadmap
 
-- **ai-evidence:** optional pixel forensics, then text and code (stylometric and provenance signals, with low weights and clear false-positive warnings), and a labelled test set to calibrate the weights.
+- **ai-evidence:** code (provenance signals), a text evaluation harness, an opt-in model-based perplexity module, and running the image harness on a real labelled set to calibrate the weights.
 - **code-teardown:** JAR, APK and .NET artifacts, more languages in the metrics.
 - More skills in the same spirit: practical checks for people who use AI at work.
 

@@ -27,6 +27,10 @@ For one claim, with items `(score_i, weight_i)`:
 
 **Confidence** comes from the total weight, not from the score: `high` if an item is conclusive, `medium` at Σweight ≥ 1.2, `low` at ≥ 0.4, below that `very_low`. With `very_low` the band is "insufficient" whatever the mean says, so a single weak item can never colour the result.
 
+## Group caps
+
+Weak signals of one kind are correlated: five stock-phrase hits and a few em dashes are one habit, not five independent proofs. So, per question, the total weight of a group is scaled down to its cap: `style` 0.5, `pixels` 0.5, the model's observations (`visual`) 1.0. Each item's weight is reduced in proportion, and the report shows the original weight next to the scaled one. The effect is that style signals alone can never raise confidence above "low", and the model's own impressions can never reach "high".
+
 ## Bands
 
 | Score | Band | Colour |
@@ -51,6 +55,8 @@ Colour is never the only carrier: every band has a text label and the number is 
 | 0.4-0.5 | Complete camera EXIF; a file name that matches a generator's download pattern |
 | 0.2-0.25 | Typical generator dimensions; make and model only |
 | 0.1 | No metadata at all |
+| 0.8-0.85 | Text residue: `tx-citation-markers` (0.85), `tx-assistant-phrases` (0.8) |
+| 0.1-0.2 | Text style items (and capped together at 0.5) |
 | 0 | Informative: editing software, C2PA present without a source type, long gap between capture and last save |
 
 Pixel measurements (the optional module, see [pixel-signals.md](pixel-signals.md)) are capped at 0.25 and are uncalibrated heuristics.
