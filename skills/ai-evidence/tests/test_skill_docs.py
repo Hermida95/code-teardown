@@ -77,6 +77,24 @@ def test_pixel_cap_is_the_same_in_the_analyzer_and_the_scorer_and_in_the_docs():
     assert "capped at weight 0.25" in (ROOT / "references/pixel-signals.md").read_text(encoding="utf-8")
 
 
+def test_evals_readme_documents_every_flag_and_its_links_resolve():
+    helptext = subprocess.run([sys.executable, str(ROOT / "evals/evaluate_dataset.py"), "--help"], capture_output=True, text=True).stdout
+    readme = (ROOT / "evals/README.md").read_text(encoding="utf-8")
+    for flag in set(re.findall(r"(--[a-z-]+)", helptext)) - {"--help"}:
+        assert flag in readme, flag
+    for doc in (ROOT / "README.md", ROOT / "CONTRIBUTING.md", ROOT / "references/scoring.md", ROOT / "evals/README.md"):
+        for target in re.findall(r"\]\(([^)#\s]+)(?:#[^)]*)?\)", doc.read_text(encoding="utf-8")):
+            if not target.startswith(("http://", "https://")):
+                assert (doc.parent / target).exists(), (doc.name, target)
+
+
+def test_the_weight_rule_in_the_evals_readme_matches_the_code():
+    sys.path.insert(0, str(ROOT / "evals"))
+    import evaluate_dataset as ev
+    assert "min(0.97, |ln LR| / ln 100)" in (ROOT / "evals/README.md").read_text(encoding="utf-8")
+    assert ev.suggested_weight(10) == 0.5 and ev.MIN_PER_CLASS == 30 and ev.DEV_SHARE == 70
+
+
 def test_plugin_manifest_matches_the_repo_marketplace_and_readme():
     plugin = json.loads((ROOT / ".claude-plugin/plugin.json").read_text())
     market = json.loads((ROOT.parent.parent / ".claude-plugin/marketplace.json").read_text())

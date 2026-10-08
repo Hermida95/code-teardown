@@ -45,7 +45,7 @@ As a Claude Code plugin:
 - **Stripped metadata is the normal case.** Messaging apps, social networks and screenshots remove it from real and AI images alike, so many images end as "not enough evidence". That is the right answer.
 - **Metadata can be forged or copied**; nothing here is proof.
 - **Pixel forensics are optional and uncalibrated** (see [pixel-signals](references/pixel-signals.md)); no invisible-watermark readers (SynthID and similar) and **C2PA signatures are not cryptographically verified**: use `c2patool` for that.
-- The weights are reasoned estimates, not fitted on a dataset. See [calibration](references/scoring.md#calibration).
+- The weights are reasoned estimates, not fitted on a dataset. The [evaluation harness](evals/README.md) exists to fix that; it has not been run on a real labelled set yet. See [calibration](references/scoring.md#calibration).
 - Do not use a report to accuse a person of faking something.
 
 ## Roadmap
@@ -53,7 +53,7 @@ As a Claude Code plugin:
 - [x] Optional pixel module (noise, periodic artifacts, error level analysis) behind Pillow/NumPy, with deliberately low weights. Next: calibrate it on a labelled set
 - [ ] **Text**: stylometric signals (sentence-length variation, stock phrases, structure) with deliberately low weights and a warning about false positives on non-native writers
 - [ ] **Code**: provenance signals (commit history shape, comment uniformity, hallucinated imports) as a companion to [code-teardown](../code-teardown)
-- [ ] A labelled evaluation set and a calibration of the weights
+- [x] An evaluation harness ([evals/](evals/README.md)): false-positive and detection rates with intervals, a dev/test split, and suggested weights. Next: run it on a real labelled set and calibrate
 - [ ] HEIC/AVIF container parsing
 
 ## Development

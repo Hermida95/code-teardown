@@ -59,4 +59,4 @@ Visual observations are capped by kind (`known_watermark` 0.6, `anatomy_text_err
 
 ## Calibration
 
-The weights are reasoned estimates, not fitted values. They should be tuned with a labelled set of images (real photos through different platforms, outputs of several generators, partial edits) and the false-positive rate on real photos should be the number to keep low. Until that exists, the report says "indications, not proof", and the bands are deliberately wide.
+The weights are reasoned estimates, not fitted values. [evals/evaluate_dataset.py](../evals/README.md) measures them on a labelled set of images: false-positive rate on real photos (the number to keep low), detection rate, abstention rate, and how each piece of evidence behaves, with a suggested weight beside the current one. Suggestions come from a dev split and the headline numbers from a held-out test split. Until it has been run on a dataset that covers real images from the channels you care about, the report says "indications, not proof", and the bands are deliberately wide.
