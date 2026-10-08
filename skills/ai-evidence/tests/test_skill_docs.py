@@ -46,7 +46,7 @@ def test_visual_example_in_skill_is_accepted_by_the_validator(tmp_path):
 
 def test_kinds_and_caps_in_docs_match_the_code():
     for kind, cap in se.VISUAL_CAPS.items():
-        assert f"`{kind}`" in SKILL + (ROOT / "references/visual-checklist.md").read_text(encoding="utf-8") + (ROOT / "references/text-signals.md").read_text(encoding="utf-8")
+        assert f"`{kind}`" in SKILL + (ROOT / "references/visual-checklist.md").read_text(encoding="utf-8") + (ROOT / "references/text-signals.md").read_text(encoding="utf-8") + (ROOT / "references/code-signals.md").read_text(encoding="utf-8")
     scoring = (ROOT / "references/scoring.md").read_text(encoding="utf-8")
     for kind in ("known_watermark", "anatomy_text_errors", "physics_lighting", "natural_cues", "texture_style"):
         assert f"`{kind}` {se.VISUAL_CAPS[kind]}" in scoring
@@ -131,3 +131,15 @@ def test_every_entry_point_says_the_tool_does_not_accuse():
 def test_both_report_languages_carry_the_non_accusation_notice():
     assert "no acusa a nadie" in se.UI["es"]["disclaimer"] and "para ver, comprobar y aprender" in se.UI["es"]["disclaimer"]
     assert "does not accuse anyone" in se.UI["en"]["disclaimer"] and "seeing, checking and learning" in se.UI["en"]["disclaimer"]
+
+
+def test_code_module_is_documented_and_never_runs_git():
+    helptext = subprocess.run([sys.executable, str(ROOT / "scripts" / "analyze_code.py"), "--help"], capture_output=True, text=True).stdout
+    for flag in ("--git-log", "--out", "--force"):
+        assert flag in helptext
+    assert "analyze_code.py" in SKILL and "code-signals.md" in SKILL and "--git-log" in SKILL
+    source = (ROOT / "scripts/analyze_code.py").read_text(encoding="utf-8")
+    assert "subprocess" not in source and "os.system" not in source and "import ast" in source
+    export = "--format='%x1e%H%x1f%aI%x1f%s%x1f%b%x1d'"
+    for doc in (SKILL, (ROOT / "references/code-signals.md").read_text(encoding="utf-8")):
+        assert export in doc and "%an" not in doc and "%ae" not in doc

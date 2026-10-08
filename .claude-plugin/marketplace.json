@@ -1,6 +1,6 @@
 {
   "name": "second-opinion",
-  "description": "Second Opinion: Agent Skills for using AI with open eyes. code-teardown gives an evidence-backed verdict on code you did not write; ai-evidence scores the evidence that an image or a text was made or edited with AI.",
+  "description": "Second Opinion: Agent Skills for using AI with open eyes. code-teardown gives an evidence-backed verdict on code you did not write; ai-evidence scores the evidence that an image, a text or a codebase was made or edited with AI.",
   "owner": {
     "name": "Miguel Garcia Hermida"
   },
@@ -13,7 +13,7 @@
     {
       "name": "ai-evidence",
       "source": "./skills/ai-evidence",
-      "description": "Weighs the evidence that an image or a text was generated or edited with AI and reports scored evidence, not a verdict."
+      "description": "Weighs the evidence that an image, a text or a codebase was generated or edited with AI and reports scored evidence, not a verdict."
     }
   ]
 }

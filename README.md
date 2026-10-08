@@ -15,7 +15,7 @@ Built for [Claude Code](https://claude.com/claude-code) and any client that supp
 | | Skill | The question it answers |
 | --- | --- | --- |
 | 🔍 | [**code-teardown**](skills/code-teardown) | *"Is this code any good, and should I build on it?"* A critical teardown of a repo, a `.pyc` file or a Docker image: what is well built, what is not, and what depends on how you will use it. Every claim cites `file:line` and is checked against the real files. |
-| 🧾 | [**ai-evidence**](skills/ai-evidence) | *"Was this made or edited with AI?"* Every signal in an image or a text (generator records, Content Credentials, EXIF, pasted chatbot residue, style, what the model sees) gets a **0-10 score** and a **trust weight**; they are combined into two scored answers, *made by AI* and *edited or polished with AI*, with a confidence level. Text is much weaker ground than images, and the skill says so. |
+| 🧾 | [**ai-evidence**](skills/ai-evidence) | *"Was this made or edited with AI?"* Every signal in an image, a text or a codebase (generator records, Content Credentials, EXIF, pasted chatbot residue, assistant files and commit trailers, style, what the model sees) gets a **0-10 score** and a **trust weight**; they are combined into two scored answers, *made by AI* and *edited or polished with AI*, with a confidence level. Text and code are much weaker ground than images, and the skill says so; using AI to write code is normal, and it only reports traces. |
 
 ### What a result looks like
 
@@ -76,7 +76,7 @@ Links to the old repository URL redirect here.
 
 ## Roadmap
 
-- **ai-evidence:** code (provenance signals), a text evaluation harness, an opt-in model-based perplexity module, and running the image harness on a real labelled set to calibrate the weights.
+- **ai-evidence:** an evaluation harness for code, an opt-in check for dependencies that do not exist, an opt-in model-based perplexity module, and running the harnesses on real labelled sets to calibrate the weights.
 - **code-teardown:** JAR, APK and .NET artifacts, more languages in the metrics.
 - More skills in the same spirit: practical checks for people who use AI at work.
 

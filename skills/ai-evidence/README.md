@@ -4,7 +4,7 @@ A skill for [Claude Code](https://claude.com/claude-code) and other Agent Skills
 
 > No tool can tell you with certainty whether an image is AI-made. This one doesn't pretend to. It shows *what* it found, *where*, and *how much each thing counts*, then adds it up.
 
-**Version 0.1: images and text.** Code is planned (see the [roadmap](#roadmap)).
+**Version 0.1: images, text and code.** See the [roadmap](#roadmap) for what comes next.
 
 **What this is for.** Seeing, checking and learning. It does not accuse anyone. It shows what a piece of content carries, how much each sign counts and what could not be checked, so that a person can look further. A result is never grounds to sanction, fail, fire or name anyone, and a text result least of all.
 
@@ -23,12 +23,22 @@ They are combined into two answers, each with a colour band and a confidence lev
 | **Edited with AI?** | C2PA / IPTC composite with AI parts, AI tools in the XMP edit history |
 | **Text: written by AI?** | Residue pasted from chat assistants (citation markers, "as an AI language model"), plus weak, capped style signals and the model's reading |
 | **Text: mixed with or polished by AI?** | A style that jumps between sections of the same text |
+| **Code: largely written by AI?** | Placeholders like "rest of the code remains the same", Markdown fences pasted into source files, plus weak, capped style signals |
+| **Code: built with AI assistance?** | Committed assistant configuration (`CLAUDE.md`, `.cursorrules`...), "Co-Authored-By: <assistant>" commit trailers from a log you export |
 
 The output is one self-contained HTML report (no external resources, dark mode, Spanish or English) plus a short summary in the chat. "Not enough evidence" and "conflicting evidence" are results too, and the report says what could **not** be checked.
 
 ## Text
 
 Text is the least reliable ground, and the skill is built around that. Only **residue** is strong: tokens such as `【4:0†source】` or `utm_source=chatgpt.com`, or phrases such as "as an AI language model", which a person does not type. **Style** signals (stock phrases, em dashes, sentence-length variation) are weak, share one capped budget (total weight 0.5), and are known to flag non-native writers and formal registers far more than native, informal writing. A text can be fully AI-written and show nothing. There is no language-model score, no perplexity, and no comparison with the author's other writing yet. The report says all this, and the skill is instructed never to present a text result as grounds to accuse anyone. See [text-signals](references/text-signals.md).
+
+## Code
+
+Using AI to write code is normal and legitimate, so this does not say the code is good or bad or the work honest. It lists which traces exist. Only **residue** is strong, and mostly for the question "built with AI assistance?": configuration files of assistants committed to the project, commit trailers that name an assistant, "rest of the code remains the same" comments, a Markdown fence left at the top of a source file. **Style** (comments that narrate the next line, uniform docstrings, step-numbered comments, emoji) is weak, capped together at 0.5, and shared by formatters, templates and tutorials.
+
+- **It never runs anything and never runs `git`.** Python is parsed with `ast`, nothing is imported or executed, and a repository's own configuration can make git launch programs. History comes from a log that *you* export (the command is in [code-signals](references/code-signals.md)), which has **no author names or e-mails**; none is read or reported.
+- It is the companion to [code-teardown](../code-teardown): that one judges quality, this one reports provenance. They answer different questions.
+- Not covered: dependencies that do not exist on the registries (needs the network), whether the code works, and any comparison with the author's other code.
 
 ## How it decides (images)
 
@@ -50,7 +60,7 @@ As a Claude Code plugin:
 
 ## Honest limits
 
-- **Text results are much weaker than image results.** See above.
+- **Text and code results are much weaker than image results.** See above.
 - **Stripped metadata is the normal case.** Messaging apps, social networks and screenshots remove it from real and AI images alike, so many images end as "not enough evidence". That is the right answer.
 - **Metadata can be forged or copied**; nothing here is proof.
 - **Pixel forensics are optional and uncalibrated** (see [pixel-signals](references/pixel-signals.md)); no invisible-watermark readers (SynthID and similar) and **C2PA signatures are not cryptographically verified**: use `c2patool` for that.
@@ -61,7 +71,7 @@ As a Claude Code plugin:
 
 - [x] Optional pixel module (noise, periodic artifacts, error level analysis) behind Pillow/NumPy, with deliberately low weights. Next: calibrate it on a labelled set
 - [x] **Text**: residue and capped style signals in English and Spanish, with warnings about non-native writers. Next: the evaluation harness does not cover text yet; a model-based perplexity module (opt-in) and authorship comparison against a baseline
-- [ ] **Code**: provenance signals (commit history shape, comment uniformity, hallucinated imports) as a companion to [code-teardown](../code-teardown)
+- [x] **Code**: residue (assistant files, commit trailers, placeholders), capped style signals and optional history from an exported log. Next: an opt-in check for dependencies that do not exist on the registries, and an evaluation harness for code
 - [x] An evaluation harness ([evals/](evals/README.md)): false-positive and detection rates with intervals, a dev/test split, and suggested weights. Next: run it on a real labelled set and calibrate
 - [ ] HEIC/AVIF container parsing
 

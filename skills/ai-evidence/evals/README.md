@@ -9,7 +9,7 @@ The skill's weights are reasoned estimates. `evaluate_dataset.py` is how they ge
 - how often the answer is **"not enough evidence"**, per label. A high rate is not a failure, it is the honest answer for images that carry nothing.
 - for every piece of evidence, **how often it fires on each kind of image**, a likelihood ratio, and a **suggested weight** next to the current one.
 
-It works on **images** and on **texts** (one kind per run; the kind is inferred from the file extensions, `.png .jpg .jpeg .webp .gif` or `.txt .md .text`, and a dataset must not mix both). For texts it matters most: style signals are the ones most likely to be wrong, and until this is run on real texts they have not been measured. The model's own inspection (looking at an image, reading a text) is not part of this: it needs a model in the loop, so these numbers describe the file and pixel layers only.
+It works on **images** and on **texts** (**code is not covered yet**; one kind per run; the kind is inferred from the file extensions, `.png .jpg .jpeg .webp .gif` or `.txt .md .text`, and a dataset must not mix both). For texts it matters most: style signals are the ones most likely to be wrong, and until this is run on real texts they have not been measured. The model's own inspection (looking at an image, reading a text) is not part of this: it needs a model in the loop, so these numbers describe the file and pixel layers only.
 
 ```bash
 python3 evals/evaluate_dataset.py ~/ai-eval-data --out-dir ~/ai-eval-out            # file evidence only, no dependencies

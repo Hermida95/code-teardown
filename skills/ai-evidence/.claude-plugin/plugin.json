@@ -2,10 +2,10 @@
   "name": "ai-evidence",
   "displayName": "ai-evidence",
   "version": "0.1.0",
-  "description": "Weighs the evidence that an image or a text was generated or edited with AI: every item gets a 0-10 score and a trust weight, combined into scored answers with confidence, as one self-contained HTML report.",
+  "description": "Weighs the evidence that an image, a text or a codebase was generated or edited with AI: every item gets a 0-10 score and a trust weight, combined into scored answers with confidence, as one self-contained HTML report.",
   "author": { "name": "Miguel Garcia Hermida" },
   "homepage": "https://github.com/Hermida95/second-opinion-skills/tree/main/skills/ai-evidence",
   "repository": "https://github.com/Hermida95/second-opinion-skills",
   "license": "MIT",
-  "keywords": ["ai-detection", "provenance", "c2pa", "images", "text", "content-credentials", "forensics"]
+  "keywords": ["ai-detection", "provenance", "c2pa", "images", "text", "code", "content-credentials", "forensics"]
 }

@@ -56,7 +56,8 @@ Colour is never the only carrier: every band has a text label and the number is 
 | 0.2-0.25 | Typical generator dimensions; make and model only |
 | 0.1 | No metadata at all |
 | 0.8-0.85 | Text residue: `tx-citation-markers` (0.85), `tx-assistant-phrases` (0.8) |
-| 0.1-0.2 | Text style items (and capped together at 0.5) |
+| 0.6-0.9 | Code residue: commit trailers (0.9, for "assisted"), assistant config files (0.8), placeholders, fences, comment declarations (0.6-0.7) |
+| 0.1-0.2 | Text and code style items (capped together at 0.5) |
 | 0 | Informative: editing software, C2PA present without a source type, long gap between capture and last save |
 
 Pixel measurements (the optional module, see [pixel-signals.md](pixel-signals.md)) are capped at 0.25 and are uncalibrated heuristics.
