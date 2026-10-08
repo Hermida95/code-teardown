@@ -9,7 +9,7 @@ The skill's weights are reasoned estimates. `evaluate_dataset.py` is how they ge
 - how often the answer is **"not enough evidence"**, per label. A high rate is not a failure, it is the honest answer for images that carry nothing.
 - for every piece of evidence, **how often it fires on each kind of image**, a likelihood ratio, and a **suggested weight** next to the current one.
 
-It works on **images** and on **texts** (**code is not covered yet**; one kind per run; the kind is inferred from the file extensions, `.png .jpg .jpeg .webp .gif` or `.txt .md .text`, and a dataset must not mix both). For texts it matters most: style signals are the ones most likely to be wrong, and until this is run on real texts they have not been measured. The model's own inspection (looking at an image, reading a text) is not part of this: it needs a model in the loop, so these numbers describe the file and pixel layers only.
+It works on **images**, on **texts** and **code** (one kind per run; the kind is inferred from the files: `.png .jpg .jpeg .webp .gif` for images, `.txt .md .text` for texts, and a dataset that contains source files is read as code; a dataset must not mix kinds). For texts and code it matters most: style signals are the ones most likely to be wrong, and until this is run on real texts and projects they have not been measured. The model's own inspection (looking at an image, reading a text) is not part of this: it needs a model in the loop, so these numbers describe the file and pixel layers only.
 
 ```bash
 python3 evals/evaluate_dataset.py ~/ai-eval-data --out-dir ~/ai-eval-out            # file evidence only, no dependencies
@@ -23,9 +23,9 @@ uv run --with pillow --with numpy python evals/evaluate_dataset.py ~/ai-eval-dat
 | `--check` | Only count images per label and source, and list gaps and duplicates. Runs nothing and writes nothing; use it while collecting |
 | `--out-dir DIR` | Required unless `--check`. Must be new or empty; writes `report.md`, `summary.json` and `results.json` (one row per image and condition) |
 | `--manifest FILE` | A CSV instead of the folder convention (below) |
-| `--modality image\|text` | Force the kind of dataset instead of inferring it |
+| `--modality image\|text\|code` | Force the kind of dataset instead of inferring it |
 | `--pixels` | Also run the optional pixel module (images only; needs Pillow and NumPy) |
-| `--augment strip` | Also evaluate a cleaned copy of every file. Images are re-encoded the way a messaging app does it: no metadata, longest edge 1600 px, JPEG quality 80. Texts get the assistant residue removed (citation markers, tracking parameters, assistant phrases, placeholders). Either way it shows how much the result depends on what is easiest to lose or delete |
+| `--augment strip` | Also evaluate a cleaned copy of every file. Images are re-encoded the way a messaging app does it: no metadata, longest edge 1600 px, JPEG quality 80. Texts get the assistant residue removed (citation markers, tracking parameters, assistant phrases, placeholders). Code gets the assistant files left out, residue comments, pasted fences and README residue removed, and trailer lines taken out of the git log. Either way it shows how much the result depends on what is easiest to lose or delete |
 | `--no-filename` | Drop the file-name evidence. Use it if your files were sorted or renamed in a way that could give the label away |
 | `--lang en\|es` | Language of the report |
 | `--max-files N` | Safety limit (default 20 000) |
@@ -60,6 +60,35 @@ Beyond what the image report shows, the text report adds:
 - **Length and topic confounds** are checked by `--check`: if generated texts are much longer than the human ones, a tool can look good just by length.
 
 The cleaned copies show how much of the detection rests on residue, which anyone can delete, and how much on style, which is the weaker and less fair part.
+
+## Code
+
+The unit is a **project folder** (or a single source file), laid out as `<label>/<source>/<project>`:
+
+```
+ai-eval-code/
+  real/
+    formatter-heavy/     human projects written with black, prettier, gofmt...
+    tutorial-style/      human code with narrating comments and full docstrings
+    template-based/      human projects started from a scaffold or cookiecutter
+    ai-apps/             human projects that call AI services
+  generated/
+    chat-pasted/         projects or files as pasted from a chat, residue included
+    agent-clean/         output of a coding agent with its traces removed
+  edited/                human projects built with an assistant (the label is "assisted")
+    assistant-pair/
+```
+
+```bash
+python3 evals/evaluate_dataset.py ~/ai-eval-code --check
+python3 evals/evaluate_dataset.py ~/ai-eval-code --out-dir ~/ai-eval-code-out --augment strip
+```
+
+- **History is optional and exported by you.** The harness never runs git (a repository's own configuration can make git launch programs). To evaluate commit trailers and history shape, export a log into each project as `git-log.txt` with the command in [code-signals](../references/code-signals.md) (no author names or e-mails). `--check` tells you how many projects have one.
+- The report has the same blocks as for texts: firm (medium confidence or better) rates, **false positives by source** for the human projects, the table of **where each item fires on real projects by source**, and breakdowns **by code size** and **by main language**.
+- **The fairness check here is formatter-heavy, tutorial-style, template-based and AI-app projects written by people.** If `cd-docstring-uniformity`, `cd-narrating-comments` or `cd-emoji-in-code` fire a lot on those, that item should lose weight whatever its likelihood ratio says.
+- The cleaned copies show how much the result rests on assistant files, trailers and residue comments, which anyone can delete, and how much on style.
+- Everything stays local. Projects can contain secrets: the report holds only paths, counts and evidence ids, never code.
 
 ## Building the dataset
 

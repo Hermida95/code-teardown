@@ -143,3 +143,12 @@ def test_code_module_is_documented_and_never_runs_git():
     export = "--format='%x1e%H%x1f%aI%x1f%s%x1f%b%x1d'"
     for doc in (SKILL, (ROOT / "references/code-signals.md").read_text(encoding="utf-8")):
         assert export in doc and "%an" not in doc and "%ae" not in doc
+
+
+def test_the_evals_docs_cover_code():
+    readme = (ROOT / "evals/README.md").read_text(encoding="utf-8")
+    guide = (ROOT / "evals/COLLECTING.md").read_text(encoding="utf-8")
+    assert "git-log.txt" in readme and "## Code" in readme and "--modality image\\|text\\|code" in readme and "code is not covered yet" not in readme
+    assert "## Collecting code" in guide and "never runs git" in guide and "tutorial-style" in guide
+    source = (ROOT / "evals/evaluate_dataset.py").read_text(encoding="utf-8")
+    assert "subprocess" not in source

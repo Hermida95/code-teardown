@@ -71,8 +71,8 @@ As a Claude Code plugin:
 
 - [x] Optional pixel module (noise, periodic artifacts, error level analysis) behind Pillow/NumPy, with deliberately low weights. Next: calibrate it on a labelled set
 - [x] **Text**: residue and capped style signals in English and Spanish, with warnings about non-native writers. Next: the evaluation harness does not cover text yet; a model-based perplexity module (opt-in) and authorship comparison against a baseline
-- [x] **Code**: residue (assistant files, commit trailers, placeholders), capped style signals and optional history from an exported log. Next: an opt-in check for dependencies that do not exist on the registries, and an evaluation harness for code
-- [x] An evaluation harness ([evals/](evals/README.md)): false-positive and detection rates with intervals, a dev/test split, and suggested weights. Next: run it on a real labelled set and calibrate
+- [x] **Code**: residue (assistant files, commit trailers, placeholders), capped style signals and optional history from an exported log. Next: an opt-in check for dependencies that do not exist on the registries
+- [x] An evaluation harness for images, texts and code ([evals/](evals/README.md)): false-positive and detection rates with intervals, a dev/test split, and suggested weights. Next: run it on a real labelled set and calibrate
 - [ ] HEIC/AVIF container parsing
 
 ## Development

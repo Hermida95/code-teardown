@@ -76,7 +76,7 @@ Links to the old repository URL redirect here.
 
 ## Roadmap
 
-- **ai-evidence:** an evaluation harness for code, an opt-in check for dependencies that do not exist, an opt-in model-based perplexity module, and running the harnesses on real labelled sets to calibrate the weights.
+- **ai-evidence:** an opt-in check for dependencies that do not exist, an opt-in model-based perplexity module, and running the harnesses on real labelled sets to calibrate the weights.
 - **code-teardown:** JAR, APK and .NET artifacts, more languages in the metrics.
 - More skills in the same spirit: practical checks for people who use AI at work.
 

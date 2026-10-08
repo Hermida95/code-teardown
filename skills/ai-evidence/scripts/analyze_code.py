@@ -126,6 +126,15 @@ def walk_files(root: Path) -> tuple[list[tuple[str, str]], dict]:
     return out, stats
 
 
+def tree_digest(path: Path) -> str:
+    """The same content digest analyze() reports, for finding duplicate projects without analysing them."""
+    files, _ = walk_files(path)
+    digest = hashlib.sha256()
+    for rel, text in sorted(files):
+        digest.update(rel.encode("utf-8", "replace") + b"\0" + text.encode("utf-8", "replace"))
+    return digest.hexdigest()
+
+
 def ai_tool_files(root: Path) -> list[str]:
     if root.is_file():
         return []
@@ -460,7 +469,8 @@ def analyze(path: Path, git_log: str | None = None) -> dict:
         T("Code can be AI-written and show none of this; absence of traces is not evidence of a human author.", "El código puede estar escrito por IA y no mostrar nada de esto; la ausencia de rastros no es prueba de que lo escribiera una persona."),
     ] + notes
     return {"tool": "analyze_code", "version": VERSION,
-            "file": {"name": root_name, "format": "code", "modality": "code", "files": len(analysed), "lines": code, "sha256": digest.hexdigest()},
+            "file": {"name": root_name, "format": "code", "modality": "code", "files": len(analysed), "lines": code,
+                     "language": languages.most_common(1)[0][0] if languages else "unknown", "sha256": digest.hexdigest()},
             "evidence": unique, "measurements": measurements, "limits": limits,
             "coverage": {"checked": [T("assistant configuration files", "archivos de configuración de asistentes"), T("residue in source files and the README", "restos en los archivos de código y el README"),
                                      T("comment and docstring habits", "hábitos de comentarios y docstrings")] + ([T("commit trailers and history shape (from the log you supplied)", "marcas de commit y forma del historial (del registro que aportaste)")] if git_log is not None else []),

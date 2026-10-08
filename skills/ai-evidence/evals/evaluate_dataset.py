@@ -11,7 +11,7 @@ and reports, with confidence intervals,
   * how each piece of evidence behaves: how often it fires on each kind of image, and a suggested
     weight to compare with the current one.
 
-It works on images and on texts (one modality per run). The model's own inspection (looking at an image, reading a text) is not part of it: it needs a model in the loop.
+It works on images, texts and codebases (one modality per run). The model's own inspection (looking at an image, reading a text) is not part of it: it needs a model in the loop.
 
 This is a tool for checking and learning about the skill. It measures how the skill agrees with labels you supply; it says nothing about any person, and it is not a way to judge anyone's work.
 
@@ -46,17 +46,19 @@ from pathlib import Path
 SCRIPTS = Path(__file__).resolve().parent.parent / "scripts"
 sys.path.insert(0, str(SCRIPTS))
 import analyze_image as ai  # noqa: E402
+import analyze_code as ac  # noqa: E402
 import analyze_text as at  # noqa: E402
 import score_evidence as se  # noqa: E402
 from _common import clean_quote  # noqa: E402
 
 LABELS = ("real", "generated", "edited")
 ALIASES = {"real": "real", "human": "real", "authentic": "real", "generated": "generated", "ai": "generated",
-           "ai_generated": "generated", "synthetic": "generated", "edited": "edited", "ai_edited": "edited",
-           "inpainted": "edited"}
+           "ai_generated": "generated", "ai_written": "generated", "synthetic": "generated", "edited": "edited", "ai_edited": "edited",
+           "ai_assisted": "edited", "assisted": "edited", "inpainted": "edited"}
 IMAGE_EXTENSIONS = {".png", ".jpg", ".jpeg", ".webp", ".gif"}
 TEXT_EXTENSIONS = {".txt", ".md", ".text"}
-EXTENSIONS = IMAGE_EXTENSIONS | TEXT_EXTENSIONS
+EXTENSIONS = IMAGE_EXTENSIONS | TEXT_EXTENSIONS | set(ac.LANGS)      # source files are only here so a code dataset can be recognised
+SIZE_BUCKETS = (("under 200 lines", 0, 200), ("200-1000 lines", 200, 1000), ("1000+ lines", 1000, 10 ** 9))
 LENGTH_BUCKETS = (("under 150 words", 0, 150), ("150-400 words", 150, 400), ("400+ words", 400, 10 ** 9))
 MAX_FILE_BYTES = 64 * 1024 * 1024
 DEV_SHARE = 70
@@ -115,7 +117,64 @@ def split_for(sha256: str) -> str:
     return "dev" if int(sha256[:8], 16) % 100 < DEV_SHARE else "test"
 
 
-def discover(dataset: Path, manifest: Path | None, max_files: int) -> tuple[list[dict], list[str]]:
+def discover_code(dataset: Path, manifest: Path | None, max_files: int) -> tuple[list[dict], list[str]]:
+    """Code samples are projects (folders) or single source files: <label>/<source>/<project-or-file>."""
+    rows: list[dict] = []
+    problems: list[str] = []
+    root = dataset.resolve()
+
+    def inside(path: Path) -> bool:
+        try:
+            path.resolve().relative_to(root)
+            return not path.is_symlink()
+        except ValueError:
+            return False
+
+    def is_code_file(path: Path) -> bool:
+        return path.is_file() and not path.is_symlink() and path.suffix.lower() in ac.LANGS
+
+    if manifest:
+        with manifest.open(newline="", encoding="utf-8") as handle:
+            reader = csv.DictReader(handle)
+            if not reader.fieldnames or not {"path", "label"} <= set(reader.fieldnames):
+                raise SystemExit("error: the manifest needs the columns path and label (source and split are optional)")
+            for line, rec in enumerate(reader, start=2):
+                label = ALIASES.get((rec.get("label") or "").strip().lower())
+                target = dataset / (rec.get("path") or "")
+                split = (rec.get("split") or "").strip().lower() or None
+                if label is None:
+                    problems.append(f"manifest line {line}: unknown label {rec.get('label')!r}")
+                elif not inside(target) or not (target.is_dir() or is_code_file(target)):
+                    problems.append(f"manifest line {line}: {rec.get('path')!r} is not a project folder or source file inside the dataset")
+                elif split not in (None, "dev", "test"):
+                    problems.append(f"manifest line {line}: split must be dev or test")
+                else:
+                    rows.append({"path": str(target.relative_to(dataset)), "abs": target, "label": label,
+                                 "source": (rec.get("source") or "").strip() or "unspecified", "split": split})
+    else:
+        for top in sorted(p for p in dataset.iterdir() if p.is_dir() and not p.is_symlink()):
+            label = ALIASES.get(top.name.lower())
+            if label is None:
+                problems.append(f"folder {top.name!r} is not a label (use real, generated or edited); ignored")
+                continue
+            for source in sorted(top.iterdir()):
+                if not inside(source):
+                    continue
+                if source.is_dir():
+                    for item in sorted(source.iterdir()):
+                        if inside(item) and (item.is_dir() or is_code_file(item)):
+                            rows.append({"path": str(item.relative_to(dataset)), "abs": item, "label": label, "source": source.name, "split": None})
+                elif is_code_file(source):
+                    rows.append({"path": str(source.relative_to(dataset)), "abs": source, "label": label, "source": "unspecified", "split": None})
+    if len(rows) > max_files:
+        problems.append(f"{len(rows)} samples found; only the first {max_files} are used (see --max-files)")
+        rows = rows[:max_files]
+    return rows, problems
+
+
+def discover(dataset: Path, manifest: Path | None, max_files: int, code: bool = False) -> tuple[list[dict], list[str]]:
+    if code:
+        return discover_code(dataset, manifest, max_files)
     rows: list[dict] = []
     problems: list[str] = []
     root = dataset.resolve()
@@ -164,8 +223,19 @@ def discover(dataset: Path, manifest: Path | None, max_files: int) -> tuple[list
 
 
 def modality_of(path: Path) -> str | None:
+    if path.is_dir():
+        return "code"
     suffix = path.suffix.lower()
-    return "image" if suffix in IMAGE_EXTENSIONS else "text" if suffix in TEXT_EXTENSIONS else None
+    return "image" if suffix in IMAGE_EXTENSIONS else "text" if suffix in TEXT_EXTENSIONS else "code" if suffix in ac.LANGS else None
+
+
+def looks_like_code(rows: list[dict]) -> bool:
+    """True when the labelled files include source files (the README.md inside each project would otherwise
+    make a code dataset look like a text dataset). Source files next to images is a mixed dataset."""
+    kinds = Counter(modality_of(r["abs"]) for r in rows)
+    if kinds["code"] and kinds["image"]:
+        raise SystemExit("error: the dataset mixes images and code; evaluate them separately (separate folders) or force one with --modality")
+    return bool(kinds["code"])
 
 
 def infer_modality(rows: list[dict], forced: str | None) -> str:
@@ -257,6 +327,53 @@ def run_text(text: str, name: str) -> dict:
             "fired": [{"id": e["id"], "claim": e["claim"], "score": e["score"], "weight": e["weight"], "source": e["source"]} for e in items if e["weight"] > 0]}
 
 
+def read_git_log(path: Path) -> str | None:
+    """The optional git-log.txt a user exported into a project folder. Git is never run by the harness."""
+    log = path / "git-log.txt" if path.is_dir() else None
+    if log is None or log.is_symlink() or not log.is_file():
+        return None
+    with log.open("rb") as handle:
+        return handle.read(ac.MAX_LOG_BYTES).decode("utf-8", "replace")
+
+
+def strip_code_copy(source: Path, target: Path) -> None:
+    """Copy a project the way someone who knows the traces would leave it: assistant files not copied, residue comments,
+    pasted fences and README residue removed. Bounded, text files only, symlinks never followed."""
+    files, _ = ac.walk_files(source)
+    markers = ac.SOURCE_MARKERS + ac.PLACEHOLDERS + [ac.CHAT_REPLY]
+    for rel, text in files:
+        destination = target / rel
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        if Path(rel).name.lower().startswith("readme"):
+            text = strip_residue(text)
+        elif Path(rel).suffix.lower() in ac.LANGS:
+            lines = [line for line in text.split("\n") if not (line.strip().startswith(ac.COMMENT_START) and any(m.search(line.strip()) for m in markers))]
+            while lines and lines[0].strip().startswith("```"):
+                lines.pop(0)
+            while lines and (not lines[-1].strip() or lines[-1].strip().startswith("```")):
+                lines.pop()
+            text = "\n".join(lines) + "\n"
+        destination.write_text(text, encoding="utf-8")
+
+
+def strip_trailers(log: str | None) -> str | None:
+    if log is None:
+        return None
+    return "\n".join(line for line in log.split("\n") if not ac.TRAILER.search(line))
+
+
+def run_code(path: Path, git_log: str | None) -> dict:
+    result = ac.analyze(path, git_log)
+    items = [se.validate_item(e, "evidence") for e in result["evidence"]]
+    se.apply_group_caps(items)
+    assessment = {c: se.aggregate(items, c) for c in se.CLAIMS}
+    return {"format": "code", "sha256": result["file"]["sha256"], "files": result["file"]["files"], "lines": result["file"]["lines"],
+            "language": result["file"].get("language", "unknown"), "has_log": git_log is not None,
+            "has_provenance": any(e["source"] == "residue" and e["weight"] > 0 for e in items),
+            "assessment": {c: {k: a[k] for k in ("score", "band", "status", "confidence", "total_weight")} for c, a in assessment.items()},
+            "fired": [{"id": e["id"], "claim": e["claim"], "score": e["score"], "weight": e["weight"], "source": e["source"]} for e in items if e["weight"] > 0]}
+
+
 def evaluate(rows: list[dict], conditions: list[str], use_pixels: bool, drop_filename: bool, progress: bool, modality: str = "image") -> list[dict]:
     results = []
     with tempfile.TemporaryDirectory(prefix="ai-evidence-eval-") as scratch:
@@ -264,9 +381,18 @@ def evaluate(rows: list[dict], conditions: list[str], use_pixels: bool, drop_fil
             for condition in conditions:
                 entry = {"path": row["path"], "label": row["label"], "source": row["source"], "condition": condition}
                 try:
-                    if row["abs"].stat().st_size > MAX_FILE_BYTES:
+                    if modality != "code" and row["abs"].stat().st_size > MAX_FILE_BYTES:
                         raise ValueError("file is larger than 64 MB")
-                    if modality == "text":
+                    if modality == "code":
+                        log = read_git_log(row["abs"])
+                        if condition == "stripped":
+                            work = Path(scratch) / f"{index}"
+                            work.mkdir()
+                            strip_code_copy(row["abs"], work)
+                            entry.update(run_code(work, strip_trailers(log)))
+                        else:
+                            entry.update(run_code(row["abs"], log))
+                    elif modality == "text":
                         text = read_text_file(row["abs"])
                         entry.update(run_text(strip_residue(text) if condition == "stripped" else text, row["abs"].name))
                     else:
@@ -429,7 +555,7 @@ def summarize(results: list[dict], conditions: list[str], modality: str = "image
             key: rate(sum(r["assessment"]["generated"]["band"] in FLAGGED for r in group), len(group))
             for key, group in (("with_provenance", [r for r in with_prov if r["has_provenance"]]),
                                ("without_provenance", [r for r in with_prov if not r["has_provenance"]]))}
-        if any(r.get("format") == "text" for r in scoped):
+        if modality in ("text", "code"):
             test = [r for r in scoped if "error" not in r and r["split"] == "test"]
 
             def breakdown(groups):
@@ -440,7 +566,10 @@ def summarize(results: list[dict], conditions: list[str], modality: str = "image
                     out[name] = {"false_positive_rate": rate(sum(r["assessment"]["generated"]["band"] in FLAGGED for r in reals), len(reals)),
                                  "detection_rate": rate(sum(r["assessment"]["generated"]["band"] in FLAGGED for r in gens), len(gens))}
                 return out
-            block["by_length"] = breakdown((name, [r for r in test if low <= r["words"] < high]) for name, low, high in LENGTH_BUCKETS)
+            if modality == "text":
+                block["by_length"] = breakdown((name, [r for r in test if low <= r["words"] < high]) for name, low, high in LENGTH_BUCKETS)
+            else:
+                block["by_size"] = breakdown((name, [r for r in test if low <= r["lines"] < high]) for name, low, high in SIZE_BUCKETS)
             block["by_language"] = breakdown((lang, [r for r in test if r["language"] == lang]) for lang in sorted({r["language"] for r in test}))
         block["evidence_on_dev"] = evidence_table([r for r in scoped if r["split"] == "dev"])
         summary["conditions"][condition] = block
@@ -454,6 +583,8 @@ TEXT = {
         "files": "files", "label": "label", "source": "source", "fired": "fired (real / generated / edited)", "suggested": "suggested weight",
         "few_detail": "test: {pos} positives, {neg} negatives; at least {need} of each are needed", "too_few": "n/a (too few)",
         "with_meta": "with metadata", "without_meta": "without metadata", "with_resid": "with residue from a chat assistant", "without_resid": "without residue",
+        "with_trace": "with traces of an assistant", "without_trace": "without traces", "by_size": "By code size (test split)", "by_main_language": "By main language (test split)",
+        "code_hint": "For code, the false positives that matter are human projects written with formatters, templates, scaffolding tools or tutorial-style comments, and projects that call AI services. Include some of each among the real ones. Real projects must predate AI assistants or be known to have been written without one.",
         "by_length": "By text length (test split)", "by_language": "By language (test split)", "bucket": "group", "real_by_source": "fires on real, by source",
         "purpose": "This evaluation is a way to check and learn about the tool. It measures how the tool agrees with the labels you supplied. It says nothing about any person, and it is not a way to judge anyone's work.",
         "dup": "duplicate content", "dup_labels": " with different labels",
@@ -475,13 +606,15 @@ TEXT = {
             "Precision depends on how many real and generated images you included, so it does not transfer to real life, where the mix is different.",
             "These numbers describe this dataset. A different mix of generators, cameras and platforms will give different ones.",
         ],
-        "cond": {"original": "Original files", "stripped": "Stripped copies (images: no metadata, JPEG q80, max 1600 px; texts: assistant residue removed)"},
+        "cond": {"original": "Original files", "stripped": "Stripped copies (images: no metadata, JPEG q80, max 1600 px; texts: assistant residue removed; code: assistant files, trailers and residue comments removed)"},
         "claim": {"generated": "Generated by AI", "ai_edited": "Edited with AI"},
     },
     "es": {
         "files": "archivos", "label": "etiqueta", "source": "origen", "fired": "salta en (real / generada / editada)", "suggested": "peso sugerido",
         "few_detail": "test: {pos} positivos, {neg} negativos; hacen falta al menos {need} de cada", "too_few": "n/d (muy pocas)",
         "with_meta": "con metadatos", "without_meta": "sin metadatos", "with_resid": "con restos de un asistente de chat", "without_resid": "sin restos",
+        "with_trace": "con rastros de un asistente", "without_trace": "sin rastros", "by_size": "Según el tamaño del código (split test)", "by_main_language": "Según el lenguaje principal (split test)",
+        "code_hint": "En código, los falsos positivos que importan son proyectos humanos escritos con formateadores, plantillas, herramientas de andamiaje o comentarios de estilo tutorial, y los proyectos que llaman a servicios de IA. Incluye algunos de cada entre los reales. Los proyectos reales deben ser anteriores a los asistentes de IA o saberse escritos sin uno.",
         "by_length": "Según la longitud del texto (split test)", "by_language": "Según el idioma (split test)", "bucket": "grupo", "real_by_source": "salta en reales, por origen",
         "purpose": "Esta evaluación sirve para comprobar y aprender sobre la herramienta. Mide cuánto coincide la herramienta con las etiquetas que tú aportaste. No dice nada sobre ninguna persona y no es una forma de juzgar el trabajo de nadie.",
         "dup": "contenido duplicado", "dup_labels": " con etiquetas distintas",
@@ -503,7 +636,7 @@ TEXT = {
             "La precisión depende de cuántas imágenes reales y generadas incluyas, así que no se traslada a la vida real, donde la mezcla es otra.",
             "Estas cifras describen este conjunto. Otra mezcla de generadores, cámaras y plataformas dará otras.",
         ],
-        "cond": {"original": "Archivos originales", "stripped": "Copias limpiadas (imágenes: sin metadatos, JPEG q80, máx. 1600 px; textos: sin restos de asistente)"},
+        "cond": {"original": "Archivos originales", "stripped": "Copias limpiadas (imágenes: sin metadatos, JPEG q80, máx. 1600 px; textos: sin restos de asistente; código: sin archivos de asistente, marcas de commit ni comentarios con restos)"},
         "claim": {"generated": "Generada por IA", "ai_edited": "Editada con IA"},
     },
 }
@@ -562,11 +695,12 @@ def render_markdown(summary: dict, problems: list[str], lang: str) -> str:
             out += ["", f"### {t['sources']}", "", f"| {t['source']} | " + " | ".join(t["claim"].values()) + " |", "| --- | --- | --- |"]
             out += [f"| {cell(src)} | " + " | ".join(pct(v[c]) for c in CONTRASTS) + " |" for src, v in block["false_positive_by_source"].items()]
         meta = block["generated_detection_by_provenance"]
-        is_text = summary.get("modality") == "text"
+        kind = summary.get("modality", "image")
+        suffix = {"text": "resid", "code": "trace"}.get(kind, "meta")
         out += ["", f"### {t['meta']}", "", "| | |", "| --- | --- |",
-                f"| {t['with_resid' if is_text else 'with_meta']} | {pct(meta['with_provenance'])} |",
-                f"| {t['without_resid' if is_text else 'without_meta']} | {pct(meta['without_provenance'])} |"]
-        for key, title in (("by_length", "by_length"), ("by_language", "by_language")):
+                f"| {t['with_' + suffix]} | {pct(meta['with_provenance'])} |",
+                f"| {t['without_' + suffix]} | {pct(meta['without_provenance'])} |"]
+        for key, title in (("by_length", "by_length"), ("by_size", "by_size"), ("by_language", "by_main_language" if kind == "code" else "by_language")):
             if key in block:
                 out += ["", f"### {t[title]}", "", f"| {t['bucket']} | {t['fpr']} | {t['tpr']} |", "| --- | --- | --- |"]
                 out += [f"| {cell(name)} | {pct(v['false_positive_rate'])} | {pct(v['detection_rate'])} |" for name, v in block[key].items()]
@@ -579,6 +713,8 @@ def render_markdown(summary: dict, problems: list[str], lang: str) -> str:
             by_source = ", ".join(f"{cell(src)} {k}/{n}" for src, (k, n) in e["fires_on_real_by_source"].items() if k) or "-"
             out.append(f"| `{e['id']}` | {e['claim']} | {e['current_score']:g} | {e['current_weight']:g} | {fired} | {e['likelihood_ratio']:g}{flag} | {suggestion} | {by_source} |")
     out += ["", f"## {t['reading']}", ""] + [f"- {line}" for line in t["reading_text"]]
+    if summary.get("modality") == "code":
+        out.append(f"- {t['code_hint']}")
     return "\n".join(out) + "\n"
 
 
@@ -589,10 +725,17 @@ def check_dataset(rows: list[dict], problems: list[str], modality: str = "image"
     shas: dict = defaultdict(list)
     for r in rows:
         by_source[r["label"]][r["source"]] += 1
-        sha = content_sha(r["abs"])
+        sha = ac.tree_digest(r["abs"]) if modality == "code" else content_sha(r["abs"])
         if sha:
             shas[sha].append(r)
-    lines = [f"{len(rows)} labelled {modality} files"]
+    lines = [f"{len(rows)} labelled {'code samples' if modality == 'code' else modality + ' files'}"]
+    code_lines: dict = defaultdict(list)
+    no_log = 0
+    if modality == "code":
+        for r in rows:
+            files, _ = ac.walk_files(r["abs"])
+            code_lines[r["label"]].append(sum(1 for _, text in files for line in text.split("\n") if line.strip()))
+            no_log += read_git_log(r["abs"]) is None
     words_by_label: dict = defaultdict(list)
     if modality == "text":
         for r in rows:
@@ -604,6 +747,20 @@ def check_dataset(rows: list[dict], problems: list[str], modality: str = "image"
         sources = ", ".join(f"{cell(src)}: {n}" for src, n in sorted(by_source[label].items())) or "none"
         lines.append(f"  {label}: {by_label[label]}  ({sources})")
     notes = [cell(p) for p in problems]
+    if modality == "code":
+        medians = {label: statistics.median(v) for label, v in code_lines.items() if v}
+        lines += [f"  median non-blank lines, {label}: {medians[label]:g}" for label in LABELS if label in medians]
+        if "real" in medians and "generated" in medians and max(medians["real"], medians["generated"]) > 3 * max(1, min(medians["real"], medians["generated"])):
+            notes.append("real and generated projects differ more than 3x in size: a tool could look good just by size. Match them (same kind of task, similar size)")
+        small = sum(1 for v in code_lines.values() for n in v if n < ac.MIN_CODE_LINES)
+        if small:
+            notes.append(f"{small} samples have fewer than {ac.MIN_CODE_LINES} non-blank lines: style is not scored for them, only residue")
+        if no_log == len(rows):
+            notes.append("no sample has a git-log.txt, so commit trailers and history shape are not evaluated; export one per project with the command in references/code-signals.md (no author names)")
+        elif no_log:
+            notes.append(f"{no_log} of {len(rows)} samples have no git-log.txt; history is evaluated only for the others")
+        if by_label["real"] and len(by_source["real"]) < 2:
+            notes.append("real projects come from a single source; add different kinds of human code (formatter-heavy, template-based, tutorial-style, and apps that call AI services)")
     if modality == "text":
         medians = {label: statistics.median(v) for label, v in words_by_label.items() if v}
         lines += [f"  median words, {label}: {medians[label]:g}" for label in LABELS if label in medians]
@@ -639,7 +796,7 @@ def main() -> None:
     parser.add_argument("--manifest", type=Path, help="manifest.csv with path,label[,source,split]")
     parser.add_argument("--pixels", action="store_true", help="also run the optional pixel module (needs Pillow and NumPy)")
     parser.add_argument("--augment", choices=["strip"], help="also evaluate cleaned copies: images re-encoded like a messaging app (needs Pillow), texts with assistant residue removed")
-    parser.add_argument("--modality", choices=["image", "text"], help="force the kind of dataset (default: inferred from the file extensions; a dataset must not mix both)")
+    parser.add_argument("--modality", choices=["image", "text", "code"], help="force the kind of dataset (default: inferred from the file extensions; a dataset must not mix both)")
     parser.add_argument("--no-filename", action="store_true", help="drop the file-name evidence (names can leak the label in a sorted dataset)")
     parser.add_argument("--lang", choices=["en", "es"], default="en")
     parser.add_argument("--max-files", type=int, default=20000)
@@ -651,7 +808,14 @@ def main() -> None:
         sys.exit("error: --out-dir is required (or use --check)")
     if args.out_dir and args.out_dir.exists() and (not args.out_dir.is_dir() or any(args.out_dir.iterdir())):
         sys.exit(f"error: {args.out_dir} must not exist yet or must be an empty directory")
-    rows, problems = discover(args.dataset, args.manifest, args.max_files)
+    rows, problems = discover(args.dataset, args.manifest, args.max_files, code=args.modality == "code")
+    if rows and not args.modality and looks_like_code(rows):
+        rows, problems = discover(args.dataset, args.manifest, args.max_files, code=True)
+        args.modality = "code"
+    if not rows and not args.modality:       # nothing that looks like images or texts: try the project layout
+        code_rows, code_problems = discover(args.dataset, args.manifest, args.max_files, code=True)
+        if code_rows:
+            rows, problems, args.modality = code_rows, code_problems, "code"
     if not rows:
         sys.exit("error: no labelled files found. " + " ".join(problems))
     modality = infer_modality(rows, args.modality)
@@ -661,7 +825,7 @@ def main() -> None:
     rows = kept
     if not rows:
         sys.exit(f"error: no {modality} files found")
-    if modality == "text" and args.pixels:
+    if modality != "image" and args.pixels:
         sys.exit("error: --pixels applies to images only")
     if args.pixels or (args.augment and modality == "image"):
         try:
@@ -673,7 +837,7 @@ def main() -> None:
         print(check_dataset(rows, problems, modality), end="")
         return
     conditions = ["original"] + (["stripped"] if args.augment == "strip" else [])
-    print(f"evaluating {len(rows)} {modality} files ({', '.join(conditions)})", file=sys.stderr)
+    print(f"evaluating {len(rows)} {modality} samples ({', '.join(conditions)})", file=sys.stderr)
     results = evaluate(rows, conditions, args.pixels, args.no_filename, progress=True, modality=modality)
     attach_splits(rows, results)
     summary = summarize(results, conditions, modality)
