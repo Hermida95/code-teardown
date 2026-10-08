@@ -92,7 +92,7 @@ def test_evals_readme_documents_every_flag_and_its_links_resolve():
     readme = (ROOT / "evals/README.md").read_text(encoding="utf-8")
     for flag in set(re.findall(r"(--[a-z-]+)", helptext)) - {"--help"}:
         assert flag in readme, flag
-    for doc in (ROOT / "README.md", ROOT / "CONTRIBUTING.md", ROOT / "references/scoring.md", ROOT / "evals/README.md", ROOT / "evals/COLLECTING.md"):
+    for doc in (ROOT / "README.md", ROOT / "CONTRIBUTING.md", ROOT / "references/scoring.md", ROOT / "evals/README.md", ROOT / "evals/COLLECTING.md", ROOT / "evals/GUIA-IMAGENES.es.md"):
         for target in re.findall(r"\]\(([^)#\s]+)(?:#[^)]*)?\)", doc.read_text(encoding="utf-8")):
             if not target.startswith(("http://", "https://")):
                 assert (doc.parent / target).exists(), (doc.name, target)
@@ -152,3 +152,13 @@ def test_the_evals_docs_cover_code():
     assert "## Collecting code" in guide and "never runs git" in guide and "tutorial-style" in guide
     source = (ROOT / "evals/evaluate_dataset.py").read_text(encoding="utf-8")
     assert "subprocess" not in source
+
+
+def test_the_spanish_image_guide_only_uses_flags_that_exist_and_keeps_the_notice():
+    helptext = subprocess.run([sys.executable, str(ROOT / "evals/evaluate_dataset.py"), "--help"], capture_output=True, text=True).stdout
+    guide = (ROOT / "evals/GUIA-IMAGENES.es.md").read_text(encoding="utf-8")
+    for flag in set(re.findall(r"(?<![-\w])(--[a-z][a-z-]*)", guide)):
+        assert flag in helptext, flag
+    assert "No acusa a nadie" in guide and "para ver, comprobar y aprender" in guide.lower() or "Esto es para ver, comprobar y aprender" in guide
+    assert "HEIC" in guide and "--check" in guide and "GUIA-IMAGENES.es.md" in (ROOT / "evals/COLLECTING.md").read_text(encoding="utf-8")
+    assert "/Users/" not in guide

@@ -1,5 +1,7 @@
 # Collecting a dataset
 
+*En español, con plan por sesiones y prompts listos: [GUIA-IMAGENES.es.md](GUIA-IMAGENES.es.md).*
+
 A practical plan for the labelled set that [evaluate_dataset.py](README.md) needs. Roughly 300 images and two or three hours get you a first useful read. The aim is not a big set but an **honest** one: images that went through the same journeys as the ones you will check, with labels you are sure of.
 
 ## What to aim for
