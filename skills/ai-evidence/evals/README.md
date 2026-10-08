@@ -18,7 +18,8 @@ uv run --with pillow --with numpy python evals/evaluate_dataset.py ~/ai-eval-dat
 
 | Flag | Meaning |
 | --- | --- |
-| `--out-dir DIR` | Required. Must be new or empty; writes `report.md`, `summary.json` and `results.json` (one row per image and condition) |
+| `--check` | Only count images per label and source, and list gaps and duplicates. Runs nothing and writes nothing; use it while collecting |
+| `--out-dir DIR` | Required unless `--check`. Must be new or empty; writes `report.md`, `summary.json` and `results.json` (one row per image and condition) |
 | `--manifest FILE` | A CSV instead of the folder convention (below) |
 | `--pixels` | Also run the optional pixel module (needs Pillow and NumPy) |
 | `--augment strip` | Also evaluate a copy of every image re-encoded the way a messaging app does it: no metadata, longest edge 1600 px, JPEG quality 80. This shows how much the result depends on metadata, and most images you meet in practice have lost it |
@@ -29,6 +30,8 @@ uv run --with pillow --with numpy python evals/evaluate_dataset.py ~/ai-eval-dat
 Everything runs locally; nothing is uploaded.
 
 ## Building the dataset
+
+The step-by-step plan, with quantities and the traps to avoid, is in [COLLECTING.md](COLLECTING.md). In short:
 
 Folder convention, where the second level (optional) is the **source** and is used to break the false-positive rate down:
 

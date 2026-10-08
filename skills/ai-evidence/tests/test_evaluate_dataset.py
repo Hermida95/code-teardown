@@ -315,3 +315,96 @@ def test_pixels_flag_without_dependencies_fails_with_a_hint(tmp_path, dataset):
     done = subprocess.run([sys.executable, str(SCRIPT), str(dataset), "--out-dir", str(tmp_path / "out"), "--pixels"],
                           capture_output=True, text=True, timeout=60, env={"PYTHONPATH": str(blocker), "PATH": ""})
     assert done.returncode != 0 and "uv run --with pillow --with numpy" in done.stderr
+
+
+# --- hardening: bounded hashing, safe re-encoding, sanitised report -----------------------------
+
+def test_content_sha_is_chunked_and_matches_the_plain_hash(tmp_path):
+    import hashlib
+    big = tmp_path / "big.bin"
+    big.write_bytes(b"x" * (2 * 1024 * 1024 + 17))
+    assert ev.content_sha(big) == hashlib.sha256(big.read_bytes()).hexdigest()
+    assert ev.content_sha(tmp_path / "missing.bin") is None
+
+
+def test_files_over_the_cap_are_never_read_when_assigning_a_split(tmp_path, monkeypatch):
+    big = tmp_path / "big.png"
+    big.write_bytes(b.png() + b"\x00" * 400)
+    monkeypatch.setattr(ev, "MAX_FILE_BYTES", 100)
+    monkeypatch.setattr(Path, "read_bytes", lambda self: (_ for _ in ()).throw(AssertionError("read a file over the cap")))
+    assert ev.content_sha(big) is None
+    rows = [{"path": "big.png", "abs": big, "label": "real", "source": "x", "split": None}]
+    results = [{"path": "big.png", "label": "real", "source": "x", "condition": "original", "error": "too large"}]
+    ev.attach_splits(rows, results)
+    assert results[0]["split"] in ("dev", "test") and results[0]["content_sha256"] is None
+    assert ev.duplicates(results) == []
+
+
+def test_names_from_the_dataset_cannot_inject_markdown_or_html_into_the_report(tmp_path):
+    root = tmp_path / "hostile"
+    nasty_source = "x|y`z<script>alert(1)</script>"
+    for label in ("real", "generated"):
+        folder = root / label / nasty_source
+        folder.mkdir(parents=True)
+        for i in range(12):      # enough that some real images land in the test split, where the by-source table is built
+            (folder / f"a\nb|{i}[x](evil).png").write_bytes(b.png(100 + i, 100, text={"a": "b"}))
+    (root / "real" / nasty_source / "dup\n# injected heading.png").write_bytes((root / "real" / nasty_source / "a\nb|0[x](evil).png").read_bytes())
+    (root / "unknown<img src=x>").mkdir()
+    out = tmp_path / "out"
+    run(root, "--out-dir", out)
+    report = (out / "report.md").read_text()
+    assert "<script>" not in report and "<img" not in report
+    assert "\n# injected heading" not in report and "[x](evil)" not in report
+    table_rows = [line for line in report.splitlines() if line.startswith("| x")]
+    assert table_rows and all(line.count("\n") == 0 and line.endswith("|") for line in table_rows)
+
+
+def test_cell_escapes_every_markdown_delimiter_and_bounds_length():
+    text = ev.cell("a|b`c<d>&[e](f)\n" + "z" * 500)
+    assert "|" not in text.replace("\\|", "") and "`" not in text and "<" not in text and ">" not in text
+    assert "\n" not in text and len(text) < 260
+
+
+def test_a_huge_image_is_refused_before_it_is_re_encoded(tmp_path):
+    pytest.importorskip("PIL")
+    import struct
+    import zlib
+
+    def chunk(kind, body):
+        return struct.pack(">I", len(body)) + kind + body + struct.pack(">I", zlib.crc32(kind + body))
+    bomb = tmp_path / "bomb.png"
+    bomb.write_bytes(b"\x89PNG\r\n\x1a\n" + chunk(b"IHDR", struct.pack(">IIBBBBB", 60000, 60000, 8, 2, 0, 0, 0))
+                     + chunk(b"IDAT", zlib.compress(b"\x00" * 100)) + chunk(b"IEND", b""))
+    scratch = tmp_path / "scratch"
+    scratch.mkdir()
+    with pytest.raises(Exception) as caught:
+        ev.stripped_copy(bomb, scratch)
+    assert "pixels" in str(caught.value) or "decompression" in str(caught.value).lower()
+    assert list(scratch.iterdir()) == []
+
+
+# --- --check ----------------------------------------------------------------------------------
+
+def test_check_counts_sources_and_flags_gaps_without_running_anything(tmp_path, dataset):
+    (dataset / "generated" / "sd" / "copy.jpg").write_bytes((dataset / "real" / "camera" / "img000.jpg").read_bytes())
+    done = run(dataset, "--check")
+    assert "225 labelled images" not in done.stdout and "226 labelled images" in done.stdout
+    assert "real: 90" in done.stdout and "camera: 45" in done.stdout and "whatsapp: 45" in done.stdout
+    assert "aim for at least 100" in done.stdout                      # 45 and 90 are below the target
+    assert "duplicate content with different labels" in done.stdout
+    assert not any(tmp_path.glob("out*"))                              # nothing is written
+
+
+def test_check_on_a_single_source_dataset_says_what_to_add(tmp_path):
+    root = tmp_path / "one"
+    for label in ("real", "generated"):
+        (root / label).mkdir(parents=True)
+        (root / label / "a.png").write_bytes(b.png(100 if label == "real" else 120, 100, text={"a": "b"}))
+    out = run(root, "--check").stdout
+    assert "single source" in out and "single generator" in out
+
+
+def test_check_needs_no_out_dir_but_a_normal_run_does(tmp_path, dataset):
+    assert run(dataset, "--check").returncode == 0
+    done = run(dataset, expect_ok=False)
+    assert done.returncode != 0 and "--out-dir is required" in done.stderr

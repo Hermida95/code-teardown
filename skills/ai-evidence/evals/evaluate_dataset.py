@@ -55,6 +55,7 @@ DEV_SHARE = 70
 FLAGGED = ("strong", "very_strong")
 ABSTAIN = ("insufficient", "conflict")
 MIN_PER_CLASS = 30           # below this, suggested weights and strong claims are withheld
+TARGET_PER_CLASS = 100       # what the guide recommends for a first useful read
 # claim -> (label that should score high, label it is contrasted with)
 CONTRASTS = {"generated": ("generated", "real"), "ai_edited": ("edited", "real")}
 
@@ -476,10 +477,43 @@ def render_markdown(summary: dict, problems: list[str], lang: str) -> str:
     return "\n".join(out) + "\n"
 
 
+def check_dataset(rows: list[dict], problems: list[str]) -> str:
+    """A quick look at a dataset while it is being collected: counts, gaps and duplicates. Runs nothing."""
+    by_label = Counter(r["label"] for r in rows)
+    by_source: dict = defaultdict(Counter)
+    shas: dict = defaultdict(list)
+    for r in rows:
+        by_source[r["label"]][r["source"]] += 1
+        sha = content_sha(r["abs"])
+        if sha:
+            shas[sha].append(r)
+    lines = [f"{len(rows)} labelled images"]
+    for label in LABELS:
+        sources = ", ".join(f"{cell(src)}: {n}" for src, n in sorted(by_source[label].items())) or "none"
+        lines.append(f"  {label}: {by_label[label]}  ({sources})")
+    notes = [cell(p) for p in problems]
+    for label in LABELS:
+        n = by_label[label]
+        if n == 0 and label != "edited":
+            notes.append(f"no '{label}' images: both claims need real and generated ones")
+        elif 0 < n < TARGET_PER_CLASS:
+            notes.append(f"{label}: {n} images; aim for at least {TARGET_PER_CLASS}, so that the 30% test split reaches the {MIN_PER_CLASS} the report needs")
+    if by_label["real"] and len(by_source["real"]) < 2:
+        notes.append("real images come from a single source; add the channels you will actually check (messaging apps, social networks, screenshots)")
+    if by_label["generated"] and len(by_source["generated"]) < 2:
+        notes.append("generated images come from a single generator; add at least two or three")
+    for group in shas.values():
+        if len(group) > 1:
+            labels = sorted({r["label"] for r in group})
+            notes.append(f"duplicate content{' with different labels' if len(labels) > 1 else ''}: " + ", ".join(cell(r["path"]) for r in group[:3]))
+    return "\n".join(lines + (["", "To fix:"] + [f"  - {n}" for n in notes[:30]] if notes else ["", "Nothing to fix."])) + "\n"
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Evaluate ai-evidence on a labelled image set.")
     parser.add_argument("dataset", type=Path)
-    parser.add_argument("--out-dir", type=Path, required=True, help="a new or empty directory for results.json, summary.json and report.md")
+    parser.add_argument("--out-dir", type=Path, help="a new or empty directory for results.json, summary.json and report.md (required unless --check)")
+    parser.add_argument("--check", action="store_true", help="only count, find gaps and duplicates in the dataset; runs nothing")
     parser.add_argument("--manifest", type=Path, help="manifest.csv with path,label[,source,split]")
     parser.add_argument("--pixels", action="store_true", help="also run the optional pixel module (needs Pillow and NumPy)")
     parser.add_argument("--augment", choices=["strip"], help="also evaluate copies re-encoded like a messaging app (needs Pillow)")
@@ -490,7 +524,9 @@ def main() -> None:
 
     if not args.dataset.is_dir():
         sys.exit(f"error: {args.dataset} is not a directory")
-    if args.out_dir.exists() and (not args.out_dir.is_dir() or any(args.out_dir.iterdir())):
+    if not args.check and args.out_dir is None:
+        sys.exit("error: --out-dir is required (or use --check)")
+    if args.out_dir and args.out_dir.exists() and (not args.out_dir.is_dir() or any(args.out_dir.iterdir())):
         sys.exit(f"error: {args.out_dir} must not exist yet or must be an empty directory")
     if args.pixels or args.augment:
         try:
@@ -501,6 +537,9 @@ def main() -> None:
     rows, problems = discover(args.dataset, args.manifest, args.max_files)
     if not rows:
         sys.exit("error: no labelled images found. " + " ".join(problems))
+    if args.check:
+        print(check_dataset(rows, problems), end="")
+        return
     conditions = ["original"] + (["stripped"] if args.augment == "strip" else [])
     print(f"evaluating {len(rows)} images ({', '.join(conditions)})", file=sys.stderr)
     results = evaluate(rows, conditions, args.pixels, args.no_filename, progress=True)

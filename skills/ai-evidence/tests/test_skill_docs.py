@@ -82,10 +82,18 @@ def test_evals_readme_documents_every_flag_and_its_links_resolve():
     readme = (ROOT / "evals/README.md").read_text(encoding="utf-8")
     for flag in set(re.findall(r"(--[a-z-]+)", helptext)) - {"--help"}:
         assert flag in readme, flag
-    for doc in (ROOT / "README.md", ROOT / "CONTRIBUTING.md", ROOT / "references/scoring.md", ROOT / "evals/README.md"):
+    for doc in (ROOT / "README.md", ROOT / "CONTRIBUTING.md", ROOT / "references/scoring.md", ROOT / "evals/README.md", ROOT / "evals/COLLECTING.md"):
         for target in re.findall(r"\]\(([^)#\s]+)(?:#[^)]*)?\)", doc.read_text(encoding="utf-8")):
             if not target.startswith(("http://", "https://")):
                 assert (doc.parent / target).exists(), (doc.name, target)
+
+
+def test_collecting_guide_matches_the_harness_defaults():
+    sys.path.insert(0, str(ROOT / "evals"))
+    import evaluate_dataset as ev
+    guide = (ROOT / "evals/COLLECTING.md").read_text(encoding="utf-8")
+    assert f"at least {ev.MIN_PER_CLASS} images per class" in guide and "--check" in guide and "COLLECTING.md" in (ROOT / "evals/README.md").read_text(encoding="utf-8")
+    assert ev.TARGET_PER_CLASS == 100 and "about 100 per class" in guide
 
 
 def test_the_weight_rule_in_the_evals_readme_matches_the_code():
