@@ -249,7 +249,7 @@ def test_the_output_directory_must_be_new_or_empty(tmp_path, dataset):
 def test_an_empty_dataset_is_an_error_not_a_report(tmp_path):
     (tmp_path / "empty").mkdir()
     done = run(tmp_path / "empty", "--out-dir", tmp_path / "out", expect_ok=False)
-    assert done.returncode != 0 and "no labelled images" in done.stderr
+    assert done.returncode != 0 and "no labelled files" in done.stderr
 
 
 # --- optional modules --------------------------------------------------------------------------
@@ -388,7 +388,7 @@ def test_a_huge_image_is_refused_before_it_is_re_encoded(tmp_path):
 def test_check_counts_sources_and_flags_gaps_without_running_anything(tmp_path, dataset):
     (dataset / "generated" / "sd" / "copy.jpg").write_bytes((dataset / "real" / "camera" / "img000.jpg").read_bytes())
     done = run(dataset, "--check")
-    assert "225 labelled images" not in done.stdout and "226 labelled images" in done.stdout
+    assert "226 labelled image files" in done.stdout
     assert "real: 90" in done.stdout and "camera: 45" in done.stdout and "whatsapp: 45" in done.stdout
     assert "aim for at least 100" in done.stdout                      # 45 and 90 are below the target
     assert "duplicate content with different labels" in done.stdout

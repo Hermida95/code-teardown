@@ -11,7 +11,9 @@ and reports, with confidence intervals,
   * how each piece of evidence behaves: how often it fires on each kind of image, and a suggested
     weight to compare with the current one.
 
-The model's own visual inspection is not part of it: it needs a model in the loop.
+It works on images and on texts (one modality per run). The model's own inspection (looking at an image, reading a text) is not part of it: it needs a model in the loop.
+
+This is a tool for checking and learning about the skill. It measures how the skill agrees with labels you supply; it says nothing about any person, and it is not a way to judge anyone's work.
 
 Dataset layout (see README.md):  <dataset>/<label>/<source>/<file>   with label in
 real | generated | edited, or a manifest.csv with the columns path,label[,source,split].
@@ -35,6 +37,8 @@ import csv
 import hashlib
 import json
 import math
+import re
+import statistics
 import tempfile
 from collections import Counter, defaultdict
 from pathlib import Path
@@ -42,6 +46,7 @@ from pathlib import Path
 SCRIPTS = Path(__file__).resolve().parent.parent / "scripts"
 sys.path.insert(0, str(SCRIPTS))
 import analyze_image as ai  # noqa: E402
+import analyze_text as at  # noqa: E402
 import score_evidence as se  # noqa: E402
 from _common import clean_quote  # noqa: E402
 
@@ -49,7 +54,10 @@ LABELS = ("real", "generated", "edited")
 ALIASES = {"real": "real", "human": "real", "authentic": "real", "generated": "generated", "ai": "generated",
            "ai_generated": "generated", "synthetic": "generated", "edited": "edited", "ai_edited": "edited",
            "inpainted": "edited"}
-EXTENSIONS = {".png", ".jpg", ".jpeg", ".webp", ".gif"}
+IMAGE_EXTENSIONS = {".png", ".jpg", ".jpeg", ".webp", ".gif"}
+TEXT_EXTENSIONS = {".txt", ".md", ".text"}
+EXTENSIONS = IMAGE_EXTENSIONS | TEXT_EXTENSIONS
+LENGTH_BUCKETS = (("under 150 words", 0, 150), ("150-400 words", 150, 400), ("400+ words", 400, 10 ** 9))
 MAX_FILE_BYTES = 64 * 1024 * 1024
 DEV_SHARE = 70
 FLAGGED = ("strong", "very_strong")
@@ -155,6 +163,21 @@ def discover(dataset: Path, manifest: Path | None, max_files: int) -> tuple[list
     return rows, problems
 
 
+def modality_of(path: Path) -> str | None:
+    suffix = path.suffix.lower()
+    return "image" if suffix in IMAGE_EXTENSIONS else "text" if suffix in TEXT_EXTENSIONS else None
+
+
+def infer_modality(rows: list[dict], forced: str | None) -> str:
+    kinds = Counter(modality_of(r["abs"]) for r in rows)
+    if forced:
+        return forced
+    kinds.pop(None, None)
+    if len(kinds) > 1:
+        raise SystemExit("error: the dataset mixes images and texts; evaluate them separately (separate folders) or force one with --modality")
+    return next(iter(kinds), "image")
+
+
 # --- running the skill on one image ------------------------------------------------------------
 
 def stripped_copy(source: Path, directory: Path) -> Path:
@@ -195,11 +218,46 @@ def run_image(path: Path, use_pixels: bool, drop_filename: bool) -> dict:
     assessment = {c: se.aggregate(items, c) for c in se.CLAIMS}
     return {"format": result["file"]["format"], "sha256": result["file"]["sha256"],
             "has_metadata": not any(e["id"] == "no-metadata" for e in items),
+            "has_provenance": not any(e["id"] == "no-metadata" for e in items),
             "assessment": {c: {k: a[k] for k in ("score", "band", "status", "confidence", "total_weight")} for c, a in assessment.items()},
             "fired": [{"id": e["id"], "claim": e["claim"], "score": e["score"], "weight": e["weight"]} for e in items if e["weight"] > 0]}
 
 
-def evaluate(rows: list[dict], conditions: list[str], use_pixels: bool, drop_filename: bool, progress: bool) -> list[dict]:
+def read_text_file(path: Path) -> str:
+    with path.open("rb") as handle:
+        raw = handle.read(at.MAX_BYTES)
+    if b"\x00" in raw[:4096]:
+        raise ValueError("looks like a binary file, not text")
+    return raw.decode("utf-8-sig", "replace")
+
+
+def strip_residue(text: str) -> str:
+    """Remove what a chat assistant leaves behind, the way someone who knows about it would: this shows how much
+    the result depends on residue rather than on style."""
+    for pattern, _ in at.CITATION_MARKERS:
+        text = pattern.sub("", text)
+    text = re.sub(r"[?&]utm_source=[^&\s)]+", "", text)
+    text = at.PLACEHOLDERS.sub("", text)
+    kept = []
+    for sentence in at.SENTENCE_END.split(text):
+        if any(rx.search(sentence) for rx in list(at.ASSISTANT_STRONG_RES.values()) + list(at.ASSISTANT_SOFT_RES.values())):
+            continue
+        kept.append(sentence)
+    return " ".join(kept)
+
+
+def run_text(text: str, name: str) -> dict:
+    result = at.analyze(text, name)
+    items = [se.validate_item(e, "evidence") for e in result["evidence"]]
+    se.apply_group_caps(items)
+    assessment = {c: se.aggregate(items, c) for c in se.CLAIMS}
+    return {"format": "text", "sha256": result["file"]["sha256"], "words": result["file"]["words"], "language": result["file"]["language"],
+            "has_provenance": any(e["source"] == "residue" and e["weight"] > 0 for e in items),
+            "assessment": {c: {k: a[k] for k in ("score", "band", "status", "confidence", "total_weight")} for c, a in assessment.items()},
+            "fired": [{"id": e["id"], "claim": e["claim"], "score": e["score"], "weight": e["weight"], "source": e["source"]} for e in items if e["weight"] > 0]}
+
+
+def evaluate(rows: list[dict], conditions: list[str], use_pixels: bool, drop_filename: bool, progress: bool, modality: str = "image") -> list[dict]:
     results = []
     with tempfile.TemporaryDirectory(prefix="ai-evidence-eval-") as scratch:
         for index, row in enumerate(rows, start=1):
@@ -208,17 +266,21 @@ def evaluate(rows: list[dict], conditions: list[str], use_pixels: bool, drop_fil
                 try:
                     if row["abs"].stat().st_size > MAX_FILE_BYTES:
                         raise ValueError("file is larger than 64 MB")
-                    target = row["abs"]
-                    if condition == "stripped":
-                        work = Path(scratch) / f"{index}"
-                        work.mkdir()
-                        target = stripped_copy(row["abs"], work)
-                    entry.update(run_image(target, use_pixels, drop_filename))
+                    if modality == "text":
+                        text = read_text_file(row["abs"])
+                        entry.update(run_text(strip_residue(text) if condition == "stripped" else text, row["abs"].name))
+                    else:
+                        target = row["abs"]
+                        if condition == "stripped":
+                            work = Path(scratch) / f"{index}"
+                            work.mkdir()
+                            target = stripped_copy(row["abs"], work)
+                        entry.update(run_image(target, use_pixels, drop_filename))
                 except Exception as exc:  # one bad file must not stop a long run
                     entry["error"] = f"{type(exc).__name__}: {exc}"
                 results.append(entry)
             if progress and index % 25 == 0:
-                print(f"  {index}/{len(rows)} images", file=sys.stderr)
+                print(f"  {index}/{len(rows)} {modality}s", file=sys.stderr)
     return results
 
 
@@ -270,10 +332,16 @@ def claim_metrics(entries: list[dict], claim: str) -> dict:
         return 5.0 if s is None or band(e) in ABSTAIN else s
 
     flagged_pos, flagged_neg = sum(band(e) in FLAGGED for e in pos), sum(band(e) in FLAGGED for e in neg)
+
+    def firm(e) -> bool:
+        a = e["assessment"][claim]
+        return a["band"] in FLAGGED and a["confidence"] in ("medium", "high")
     return {
         "n_positive": len(pos), "n_negative": len(neg),
         "detection_rate": rate(flagged_pos, len(pos)),
         "false_positive_rate": rate(flagged_neg, len(neg)),
+        "detection_rate_firm": rate(sum(firm(e) for e in pos), len(pos)),
+        "false_positive_rate_firm": rate(sum(firm(e) for e in neg), len(neg)),
         "abstain_on_positive": rate(sum(band(e) in ABSTAIN for e in pos), len(pos)),
         "abstain_on_negative": rate(sum(band(e) in ABSTAIN for e in neg), len(neg)),
         "decisive_on_positive": rate(sum(e["assessment"][claim]["status"] == "conclusive" for e in pos), len(pos)),
@@ -295,11 +363,15 @@ def evidence_table(entries: list[dict]) -> list[dict]:
     """How each evidence id behaves on dev images, with the current weight next to a suggested one."""
     usable = [e for e in entries if "error" not in e]
     counts: dict = defaultdict(lambda: Counter())
+    on_real: dict = defaultdict(Counter)
+    real_by_source = Counter(e["source"] for e in usable if e["label"] == "real")
     meta: dict = {}
     totals = Counter(e["label"] for e in usable)
     for e in usable:
         for f in e["fired"]:
             counts[f["id"]][e["label"]] += 1
+            if e["label"] == "real":
+                on_real[f["id"]][e["source"]] += 1
             meta[f["id"]] = f
     rows = []
     for ident, per_label in sorted(counts.items()):
@@ -316,7 +388,8 @@ def evidence_table(entries: list[dict]) -> list[dict]:
         rows.append({"id": ident, "claim": item["claim"], "current_score": item["score"], "current_weight": item["weight"],
                      "fired_on": {label: per_label.get(label, 0) for label in LABELS}, "n": {label: totals[label] for label in LABELS},
                      "likelihood_ratio": round(lr, 2), "direction_matches_score": agrees,
-                     "suggested_weight": suggestion, "enough_data": enough})
+                     "suggested_weight": suggestion, "enough_data": enough,
+                     "fires_on_real_by_source": {src: [on_real[ident].get(src, 0), n] for src, n in sorted(real_by_source.items())}})
     return rows
 
 
@@ -330,8 +403,8 @@ def duplicates(results: list[dict]) -> list[dict]:
     return [{"paths": sorted(paths[sha]), "labels": sorted(labels)} for sha, labels in seen.items() if len(paths[sha]) > 1]
 
 
-def summarize(results: list[dict], conditions: list[str]) -> dict:
-    summary: dict = {"files": len({r["path"] for r in results}), "errors": [r for r in results if "error" in r][:20],
+def summarize(results: list[dict], conditions: list[str], modality: str = "image") -> dict:
+    summary: dict = {"modality": modality, "files": len({r["path"] for r in results}), "errors": [r for r in results if "error" in r][:20],
                      "duplicates": duplicates(results),
                      "by_label": dict(Counter(r["label"] for r in results if r["condition"] == "original")),
                      "by_split": dict(Counter(f"{r['split']}/{r['label']}" for r in results if r["condition"] == "original")),
@@ -351,11 +424,24 @@ def summarize(results: list[dict], conditions: list[str]) -> dict:
         block["false_positive_by_source"] = {
             src: {claim: rate(sum(r["assessment"][claim]["band"] in FLAGGED for r in group), len(group)) for claim in CONTRASTS}
             for src, group in sorted(by_source.items())}
-        with_meta = [r for r in scoped if "error" not in r and r["label"] == "generated" and r["split"] == "test"]
-        block["generated_detection_by_metadata"] = {
+        with_prov = [r for r in scoped if "error" not in r and r["label"] == "generated" and r["split"] == "test"]
+        block["generated_detection_by_provenance"] = {
             key: rate(sum(r["assessment"]["generated"]["band"] in FLAGGED for r in group), len(group))
-            for key, group in (("with_metadata", [r for r in with_meta if r["has_metadata"]]),
-                               ("without_metadata", [r for r in with_meta if not r["has_metadata"]]))}
+            for key, group in (("with_provenance", [r for r in with_prov if r["has_provenance"]]),
+                               ("without_provenance", [r for r in with_prov if not r["has_provenance"]]))}
+        if any(r.get("format") == "text" for r in scoped):
+            test = [r for r in scoped if "error" not in r and r["split"] == "test"]
+
+            def breakdown(groups):
+                out = {}
+                for name, group in groups:
+                    reals = [r for r in group if r["label"] == "real"]
+                    gens = [r for r in group if r["label"] == "generated"]
+                    out[name] = {"false_positive_rate": rate(sum(r["assessment"]["generated"]["band"] in FLAGGED for r in reals), len(reals)),
+                                 "detection_rate": rate(sum(r["assessment"]["generated"]["band"] in FLAGGED for r in gens), len(gens))}
+                return out
+            block["by_length"] = breakdown((name, [r for r in test if low <= r["words"] < high]) for name, low, high in LENGTH_BUCKETS)
+            block["by_language"] = breakdown((lang, [r for r in test if r["language"] == lang]) for lang in sorted({r["language"] for r in test}))
         block["evidence_on_dev"] = evidence_table([r for r in scoped if r["split"] == "dev"])
         summary["conditions"][condition] = block
     return summary
@@ -367,10 +453,14 @@ TEXT = {
     "en": {
         "files": "files", "label": "label", "source": "source", "fired": "fired (real / generated / edited)", "suggested": "suggested weight",
         "few_detail": "test: {pos} positives, {neg} negatives; at least {need} of each are needed", "too_few": "n/a (too few)",
-        "with_meta": "with metadata", "without_meta": "without metadata", "dup": "duplicate content", "dup_labels": " with different labels",
+        "with_meta": "with metadata", "without_meta": "without metadata", "with_resid": "with residue from a chat assistant", "without_resid": "without residue",
+        "by_length": "By text length (test split)", "by_language": "By language (test split)", "bucket": "group", "real_by_source": "fires on real, by source",
+        "purpose": "This evaluation is a way to check and learn about the tool. It measures how the tool agrees with the labels you supplied. It says nothing about any person, and it is not a way to judge anyone's work.",
+        "dup": "duplicate content", "dup_labels": " with different labels",
         "id": "id", "claim_col": "claim", "score_col": "score", "weight_col": "weight", "direction": "direction",
         "title": "ai-evidence evaluation", "dataset": "Dataset", "warnings": "Warnings", "headline": "Headline numbers (test split)",
         "metric": "Metric", "value": "Value", "fpr": "False-positive rate on real images", "tpr": "Detection rate",
+        "fpr_firm": "False positives with at least medium confidence", "tpr_firm": "Detection with at least medium confidence",
         "abstain_pos": "\"Not enough evidence\" on positives", "abstain_neg": "\"Not enough evidence\" on real images",
         "decisive": "Positives decided by a conclusive item", "auc": "AUC (abstention counted as neutral)", "prec": "Precision (depends on this dataset's mix)",
         "bands": "Where each kind of image lands (test split)", "sources": "False positives by source of the real images (test split)",
@@ -379,21 +469,26 @@ TEXT = {
         "ci": "95% CI", "few": "too few images to conclude anything", "reading": "How to read this",
         "reading_text": [
             "The false-positive rate is the number to watch: a real photo marked as AI is the harm this tool must avoid. Look at the upper end of its interval, not the point estimate.",
+            "\"Clear signs\" with low confidence still counts as flagged in the first rows; the rows with at least medium confidence show how often the tool is firm, which for texts is the number to read.",
             "A high abstention rate is not a failure. It means the file carried no evidence, which is the honest answer for stripped images.",
             "Weights are suggested from the dev split and the headline comes from the test split. Do not change weights while looking at test, or the test numbers stop meaning anything.",
             "Precision depends on how many real and generated images you included, so it does not transfer to real life, where the mix is different.",
             "These numbers describe this dataset. A different mix of generators, cameras and platforms will give different ones.",
         ],
-        "cond": {"original": "Original files", "stripped": "Stripped copies (no metadata, JPEG q80, max 1600 px)"},
+        "cond": {"original": "Original files", "stripped": "Stripped copies (images: no metadata, JPEG q80, max 1600 px; texts: assistant residue removed)"},
         "claim": {"generated": "Generated by AI", "ai_edited": "Edited with AI"},
     },
     "es": {
         "files": "archivos", "label": "etiqueta", "source": "origen", "fired": "salta en (real / generada / editada)", "suggested": "peso sugerido",
         "few_detail": "test: {pos} positivos, {neg} negativos; hacen falta al menos {need} de cada", "too_few": "n/d (muy pocas)",
-        "with_meta": "con metadatos", "without_meta": "sin metadatos", "dup": "contenido duplicado", "dup_labels": " con etiquetas distintas",
+        "with_meta": "con metadatos", "without_meta": "sin metadatos", "with_resid": "con restos de un asistente de chat", "without_resid": "sin restos",
+        "by_length": "Según la longitud del texto (split test)", "by_language": "Según el idioma (split test)", "bucket": "grupo", "real_by_source": "salta en reales, por origen",
+        "purpose": "Esta evaluación sirve para comprobar y aprender sobre la herramienta. Mide cuánto coincide la herramienta con las etiquetas que tú aportaste. No dice nada sobre ninguna persona y no es una forma de juzgar el trabajo de nadie.",
+        "dup": "contenido duplicado", "dup_labels": " con etiquetas distintas",
         "id": "id", "claim_col": "pregunta", "score_col": "nota", "weight_col": "peso", "direction": "sentido",
         "title": "Evaluación de ai-evidence", "dataset": "Conjunto de datos", "warnings": "Avisos", "headline": "Cifras principales (split test)",
         "metric": "Medida", "value": "Valor", "fpr": "Tasa de falsos positivos en imágenes reales", "tpr": "Tasa de detección",
+        "fpr_firm": "Falsos positivos con confianza al menos media", "tpr_firm": "Detección con confianza al menos media",
         "abstain_pos": "«Sin pruebas suficientes» en positivos", "abstain_neg": "«Sin pruebas suficientes» en imágenes reales",
         "decisive": "Positivos decididos por una prueba concluyente", "auc": "AUC (la abstención cuenta como neutra)", "prec": "Precisión (depende de la mezcla de este conjunto)",
         "bands": "Dónde cae cada tipo de imagen (split test)", "sources": "Falsos positivos según el origen de las imágenes reales (split test)",
@@ -402,12 +497,13 @@ TEXT = {
         "ci": "IC 95 %", "few": "muy pocas imágenes para concluir nada", "reading": "Cómo leerlo",
         "reading_text": [
             "La tasa de falsos positivos es el número que importa: una foto real marcada como IA es el daño que esta herramienta debe evitar. Mira el extremo alto de su intervalo, no la estimación puntual.",
+            "«Indicios claros» con confianza baja cuenta como marcado en las primeras filas; las filas con confianza al menos media muestran cuántas veces la herramienta es firme, que en texto es el número que hay que leer.",
             "Una abstención alta no es un fallo. Significa que el archivo no traía pruebas, que es la respuesta honesta para imágenes sin metadatos.",
             "Los pesos se sugieren con el split dev y las cifras principales salen del split test. No cambies pesos mirando el test, o sus números dejan de significar algo.",
             "La precisión depende de cuántas imágenes reales y generadas incluyas, así que no se traslada a la vida real, donde la mezcla es otra.",
             "Estas cifras describen este conjunto. Otra mezcla de generadores, cámaras y plataformas dará otras.",
         ],
-        "cond": {"original": "Archivos originales", "stripped": "Copias sin metadatos (JPEG q80, máx. 1600 px)"},
+        "cond": {"original": "Archivos originales", "stripped": "Copias limpiadas (imágenes: sin metadatos, JPEG q80, máx. 1600 px; textos: sin restos de asistente)"},
         "claim": {"generated": "Generada por IA", "ai_edited": "Editada con IA"},
     },
 }
@@ -429,7 +525,7 @@ def pct(r: dict) -> str:
 
 def render_markdown(summary: dict, problems: list[str], lang: str) -> str:
     t = TEXT[lang]
-    out = [f"# {t['title']}", "", f"## {t['dataset']}", ""]
+    out = [f"# {t['title']}", "", f"> {t['purpose']}", "", f"## {t['dataset']}", ""]
     out.append(f"- {summary['files']} {t['files']}. " + ", ".join(f"{k}: {v}" for k, v in sorted(summary["by_label"].items())))
     out.append("- split: " + ", ".join(f"{k}: {v}" for k, v in sorted(summary["by_split"].items())))
     warnings = list(problems)
@@ -451,6 +547,8 @@ def render_markdown(summary: dict, problems: list[str], lang: str) -> str:
             out += [f"| {t['metric']} | {t['value']} |", "| --- | --- |",
                     f"| **{t['fpr']}** | **{pct(m['false_positive_rate'])}** |",
                     f"| {t['tpr']} | {pct(m['detection_rate'])} |",
+                    f"| {t['fpr_firm']} | {pct(m['false_positive_rate_firm'])} |",
+                    f"| {t['tpr_firm']} | {pct(m['detection_rate_firm'])} |",
                     f"| {t['abstain_pos']} | {pct(m['abstain_on_positive'])} |",
                     f"| {t['abstain_neg']} | {pct(m['abstain_on_negative'])} |",
                     f"| {t['decisive']} | {pct(m['decisive_on_positive'])} |",
@@ -463,21 +561,28 @@ def render_markdown(summary: dict, problems: list[str], lang: str) -> str:
         if block["false_positive_by_source"]:
             out += ["", f"### {t['sources']}", "", f"| {t['source']} | " + " | ".join(t["claim"].values()) + " |", "| --- | --- | --- |"]
             out += [f"| {cell(src)} | " + " | ".join(pct(v[c]) for c in CONTRASTS) + " |" for src, v in block["false_positive_by_source"].items()]
-        meta = block["generated_detection_by_metadata"]
+        meta = block["generated_detection_by_provenance"]
+        is_text = summary.get("modality") == "text"
         out += ["", f"### {t['meta']}", "", "| | |", "| --- | --- |",
-                f"| {t['with_meta']} | {pct(meta['with_metadata'])} |", f"| {t['without_meta']} | {pct(meta['without_metadata'])} |"]
+                f"| {t['with_resid' if is_text else 'with_meta']} | {pct(meta['with_provenance'])} |",
+                f"| {t['without_resid' if is_text else 'without_meta']} | {pct(meta['without_provenance'])} |"]
+        for key, title in (("by_length", "by_length"), ("by_language", "by_language")):
+            if key in block:
+                out += ["", f"### {t[title]}", "", f"| {t['bucket']} | {t['fpr']} | {t['tpr']} |", "| --- | --- | --- |"]
+                out += [f"| {cell(name)} | {pct(v['false_positive_rate'])} | {pct(v['detection_rate'])} |" for name, v in block[key].items()]
         out += ["", f"### {t['evidence']}", "", t["evidence_note"], "",
-                f"| {t['id']} | {t['claim_col']} | {t['score_col']} | {t['weight_col']} | {t['fired']} | LR | {t['suggested']} |", "| --- | --- | --- | --- | --- | --- | --- |"]
+                f"| {t['id']} | {t['claim_col']} | {t['score_col']} | {t['weight_col']} | {t['fired']} | LR | {t['suggested']} | {t['real_by_source']} |", "| --- | --- | --- | --- | --- | --- | --- | --- |"]
         for e in block["evidence_on_dev"]:
             fired = " / ".join(f"{e['fired_on'][label]}/{e['n'][label]}" for label in LABELS)
             suggestion = t["too_few"] if e["suggested_weight"] is None else f"{e['suggested_weight']:.2f}"
             flag = "" if e["direction_matches_score"] in (True, None) else f" ⚠ {t['direction']}"
-            out.append(f"| `{e['id']}` | {e['claim']} | {e['current_score']:g} | {e['current_weight']:g} | {fired} | {e['likelihood_ratio']:g}{flag} | {suggestion} |")
+            by_source = ", ".join(f"{cell(src)} {k}/{n}" for src, (k, n) in e["fires_on_real_by_source"].items() if k) or "-"
+            out.append(f"| `{e['id']}` | {e['claim']} | {e['current_score']:g} | {e['current_weight']:g} | {fired} | {e['likelihood_ratio']:g}{flag} | {suggestion} | {by_source} |")
     out += ["", f"## {t['reading']}", ""] + [f"- {line}" for line in t["reading_text"]]
     return "\n".join(out) + "\n"
 
 
-def check_dataset(rows: list[dict], problems: list[str]) -> str:
+def check_dataset(rows: list[dict], problems: list[str], modality: str = "image") -> str:
     """A quick look at a dataset while it is being collected: counts, gaps and duplicates. Runs nothing."""
     by_label = Counter(r["label"] for r in rows)
     by_source: dict = defaultdict(Counter)
@@ -487,11 +592,28 @@ def check_dataset(rows: list[dict], problems: list[str]) -> str:
         sha = content_sha(r["abs"])
         if sha:
             shas[sha].append(r)
-    lines = [f"{len(rows)} labelled images"]
+    lines = [f"{len(rows)} labelled {modality} files"]
+    words_by_label: dict = defaultdict(list)
+    if modality == "text":
+        for r in rows:
+            try:
+                words_by_label[r["label"]].append(len(at.WORD.findall(read_text_file(r["abs"]))))
+            except (OSError, ValueError):
+                pass
     for label in LABELS:
         sources = ", ".join(f"{cell(src)}: {n}" for src, n in sorted(by_source[label].items())) or "none"
         lines.append(f"  {label}: {by_label[label]}  ({sources})")
     notes = [cell(p) for p in problems]
+    if modality == "text":
+        medians = {label: statistics.median(v) for label, v in words_by_label.items() if v}
+        lines += [f"  median words, {label}: {medians[label]:g}" for label in LABELS if label in medians]
+        if "real" in medians and "generated" in medians and max(medians["real"], medians["generated"]) > 2 * max(1, min(medians["real"], medians["generated"])):
+            notes.append("real and generated texts differ more than 2x in length: a tool could look good just by length. Match the lengths (and topics) of the two groups")
+        short = sum(1 for v in words_by_label.values() for n in v if n < at.MIN_WORDS_STYLE)
+        if short:
+            notes.append(f"{short} texts have fewer than {at.MIN_WORDS_STYLE} words: style is not scored for them, only residue")
+        if by_label["real"] and len(by_source["real"]) < 2:
+            notes.append("add human texts from different kinds of writers, including people writing in a second language: that is where false positives are most likely")
     for label in LABELS:
         n = by_label[label]
         if n == 0 and label != "edited":
@@ -510,13 +632,14 @@ def check_dataset(rows: list[dict], problems: list[str]) -> str:
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Evaluate ai-evidence on a labelled image set.")
+    parser = argparse.ArgumentParser(description="Evaluate ai-evidence on a labelled set of images or texts.")
     parser.add_argument("dataset", type=Path)
     parser.add_argument("--out-dir", type=Path, help="a new or empty directory for results.json, summary.json and report.md (required unless --check)")
     parser.add_argument("--check", action="store_true", help="only count, find gaps and duplicates in the dataset; runs nothing")
     parser.add_argument("--manifest", type=Path, help="manifest.csv with path,label[,source,split]")
     parser.add_argument("--pixels", action="store_true", help="also run the optional pixel module (needs Pillow and NumPy)")
-    parser.add_argument("--augment", choices=["strip"], help="also evaluate copies re-encoded like a messaging app (needs Pillow)")
+    parser.add_argument("--augment", choices=["strip"], help="also evaluate cleaned copies: images re-encoded like a messaging app (needs Pillow), texts with assistant residue removed")
+    parser.add_argument("--modality", choices=["image", "text"], help="force the kind of dataset (default: inferred from the file extensions; a dataset must not mix both)")
     parser.add_argument("--no-filename", action="store_true", help="drop the file-name evidence (names can leak the label in a sorted dataset)")
     parser.add_argument("--lang", choices=["en", "es"], default="en")
     parser.add_argument("--max-files", type=int, default=20000)
@@ -528,23 +651,32 @@ def main() -> None:
         sys.exit("error: --out-dir is required (or use --check)")
     if args.out_dir and args.out_dir.exists() and (not args.out_dir.is_dir() or any(args.out_dir.iterdir())):
         sys.exit(f"error: {args.out_dir} must not exist yet or must be an empty directory")
-    if args.pixels or args.augment:
+    rows, problems = discover(args.dataset, args.manifest, args.max_files)
+    if not rows:
+        sys.exit("error: no labelled files found. " + " ".join(problems))
+    modality = infer_modality(rows, args.modality)
+    kept = [r for r in rows if modality_of(r["abs"]) == modality]
+    if len(kept) < len(rows):
+        problems.append(f"{len(rows) - len(kept)} files are not {modality}s and were ignored")
+    rows = kept
+    if not rows:
+        sys.exit(f"error: no {modality} files found")
+    if modality == "text" and args.pixels:
+        sys.exit("error: --pixels applies to images only")
+    if args.pixels or (args.augment and modality == "image"):
         try:
             import numpy  # noqa: F401
             import PIL  # noqa: F401
         except ImportError:
             sys.exit("error: --pixels and --augment need Pillow and NumPy; try: uv run --with pillow --with numpy python evals/evaluate_dataset.py ...")
-    rows, problems = discover(args.dataset, args.manifest, args.max_files)
-    if not rows:
-        sys.exit("error: no labelled images found. " + " ".join(problems))
     if args.check:
-        print(check_dataset(rows, problems), end="")
+        print(check_dataset(rows, problems, modality), end="")
         return
     conditions = ["original"] + (["stripped"] if args.augment == "strip" else [])
-    print(f"evaluating {len(rows)} images ({', '.join(conditions)})", file=sys.stderr)
-    results = evaluate(rows, conditions, args.pixels, args.no_filename, progress=True)
+    print(f"evaluating {len(rows)} {modality} files ({', '.join(conditions)})", file=sys.stderr)
+    results = evaluate(rows, conditions, args.pixels, args.no_filename, progress=True, modality=modality)
     attach_splits(rows, results)
-    summary = summarize(results, conditions)
+    summary = summarize(results, conditions, modality)
     summary["settings"] = {"pixels": args.pixels, "augment": args.augment, "no_filename": args.no_filename, "dev_share_percent": DEV_SHARE}
     args.out_dir.mkdir(parents=True, exist_ok=True)
     (args.out_dir / "results.json").write_text(json.dumps(results, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")

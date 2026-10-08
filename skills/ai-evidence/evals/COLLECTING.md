@@ -56,6 +56,31 @@ Research datasets of real and AI-generated images exist, and using one saves eff
 
 Photos of people are personal data. Use your own, or ones whose subjects agreed, and do not include children's photos from anyone else. Keep the dataset on your machine: `evals/datasets/` is ignored by git, nothing in the harness uploads anything, and the report only contains file names and counts, so check the names before sharing a report.
 
+## Collecting texts
+
+Same principle (labels you are sure of, the journeys you will meet), with different traps.
+
+| Group | Folder | First useful read |
+| --- | --- | --- |
+| Human, native speakers | `real/native-.../` | 100 |
+| Human, second-language writers | `real/non-native-.../` | 60 |
+| Human, short and informal (notes, messages) | `real/informal/` | 40 |
+| Generated, as pasted from a chat | `generated/<assistant>-pasted/` | 60 |
+| Generated, as returned by an API or with the residue deleted | `generated/<assistant>-clean/` | 60 |
+| Human text polished or rewritten by an assistant | `edited/...` | 50 |
+
+1. **Humans.** Use your own old writing (before 2022 is the safest proof it is human), writing from people who gave you permission, or texts whose origin you can vouch for. Do not use other people's schoolwork, applications or private messages without their agreement, and never use this to test a particular person.
+2. **Include second-language writers.** This is the most important group. Style signals flag them far more than native speakers, and a dataset without them hides the main harm. Ask volunteers to write on the same prompts as everyone else.
+3. **Same topics, same lengths.** Give the assistant the same prompts the human writers had and ask for the same length. If generated texts are longer, or on different topics, the numbers measure that instead. `--check` warns about a length gap.
+4. **Both ways of getting AI text.** Pasted from a chat interface (residue included) and returned clean by an API or after deleting the residue. The second kind is what a careful user hands in, and it is where the tool will usually say "not enough evidence".
+5. **Several assistants and several instructions.** Include "write naturally", "write like a student" and "avoid clichés": the tool should do worst there, and you want to know by how much.
+6. **Polished texts.** Take a human draft and have an assistant improve it. Label it `edited`, not `generated`.
+7. **Lengths.** Mix short (under 150 words), medium and long texts. Short ones only get residue checks.
+8. **Languages.** English and Spanish are covered. Include a few texts in other languages to see that the tool abstains instead of guessing.
+9. **No duplicates**, and nothing you are not sure about.
+
+Texts of other people are personal data. Keep the set on your machine (`evals/datasets/` is ignored by git), and do not publish it.
+
 ## The loop
 
 ```bash

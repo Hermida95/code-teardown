@@ -13,7 +13,7 @@ ai-evidence reads untrusted image files, so its own safety matters.
 
 ## What it does not guarantee
 
-- It is not a forensic tool and its output is not evidence for legal use.
+- It is not a forensic tool and its output is not evidence for legal use, nor grounds to accuse or sanction anyone.
 - It does not verify C2PA signatures; a declared source type is a claim, not a validated fact.
 - Permission prompts belong to your agent client, not to this project; the skill does not pre-approve its scripts.
 

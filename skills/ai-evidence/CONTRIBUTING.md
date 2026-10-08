@@ -4,6 +4,8 @@ The project is small on purpose, and a few rules keep it trustworthy.
 
 ## Ground rules
 
+0. **It does not accuse.** The project exists to see, check and learn. Do not add features that single out, rank or name people (no "most AI-like author" lists, no verdict wording, no per-person scores). Keep the non-accusation notice in every report.
+
 1. **Evidence, not verdicts.** Nothing in the output may read as proof. New signals come with a score, a weight and a written way they can be wrong in [references/image-signals.md](references/image-signals.md).
 2. **Weights need a reason.** If you change a weight or the aggregation, update [references/scoring.md](references/scoring.md) in the same change and say what data motivated it, ideally a run of [the evaluation harness](evals/README.md) (numbers on a held-out test split, never on the images the change was fitted to). Do not commit datasets.
 3. **Static only.** The analyzed file is read as bytes; only the optional pixel module decodes it (with Pillow, under size limits). No execution, no network.

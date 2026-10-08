@@ -8,6 +8,8 @@ AI now writes code and makes images that look finished. Before you adopt, ship o
 
 Built for [Claude Code](https://claude.com/claude-code) and any client that supports Agent Skills. Standard-library Python, nothing is ever executed or uploaded, and each run ends in one self-contained HTML report you can read or share.
 
+**What this is for.** Seeing, checking and learning. It does not accuse anyone. It shows what a piece of content carries, how much each sign counts and what could not be checked, so that a person can look further. A result is never grounds to sanction, fail, fire or name anyone, and a text result least of all.
+
 ## The skills
 
 | | Skill | The question it answers |

@@ -73,6 +73,8 @@ It answers in chat with a short summary like this one (written from the [example
 
 JAR, APK, .NET and native binaries are recognized and declined (see the [roadmap](#roadmap)).
 
+It judges the code, not the people who wrote it: the point is to learn from someone else's work, not to rate its author.
+
 ## Install
 
 Requirements: Python 3.11+. Optional: [`pycdc`](https://github.com/zrax/pycdc) or `decompyle3` for better `.pyc` output; the Docker CLI only if you analyze an image by name.

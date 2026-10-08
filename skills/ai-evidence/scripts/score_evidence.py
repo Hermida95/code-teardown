@@ -84,7 +84,7 @@ UI = {
         "method_text": "Cada evidencia tiene una nota de 0 (apunta a «no es IA») a 10 (apunta a «es IA») y un peso de 0 a 1 que dice cuánto se puede fiar de ella. "
                        "La nota final es la media ponderada por peso. Una evidencia de peso 0,9 o más decide por sí sola, y si dos de ellas se contradicen no se promedian: se marca como contradictoria. "
                        "La confianza depende de cuánto peso total hay, no de la nota.",
-        "disclaimer": "Esto es un conjunto de indicios, no una prueba ni un veredicto. Ningún análisis automático distingue con certeza un contenido generado de uno real, "
+        "disclaimer": "Esta herramienta no acusa a nadie: sirve para ver, comprobar y aprender. Esto es un conjunto de indicios, no una prueba ni un veredicto. Ningún análisis automático distingue con certeza un contenido generado de uno real, "
                       "y los metadatos pueden faltar, copiarse o falsificarse. No uses este informe para acusar a nadie.",
         "visual_note": "Observación visual del modelo", "clamped": "peso limitado de {a} a {b}",
     },
@@ -117,7 +117,7 @@ UI = {
         "method_text": "Each piece of evidence has a score from 0 (points to \"not AI\") to 10 (points to \"AI\") and a weight from 0 to 1 saying how far it can be trusted. "
                        "The final score is the weight-weighted mean. An item with weight 0.9 or more decides on its own, and two that contradict each other are not averaged: the result is marked as conflicting. "
                        "Confidence depends on how much total weight exists, not on the score.",
-        "disclaimer": "This is a set of indications, not proof or a verdict. No automatic analysis tells generated content from real content with certainty, "
+        "disclaimer": "This tool does not accuse anyone: it is for seeing, checking and learning. This is a set of indications, not proof or a verdict. No automatic analysis tells generated content from real content with certainty, "
                       "and metadata can be missing, copied or forged. Do not use this report to accuse anyone.",
         "visual_note": "Visual observation by the model", "clamped": "weight capped from {a} to {b}",
     },

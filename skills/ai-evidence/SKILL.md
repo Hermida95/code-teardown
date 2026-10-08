@@ -7,6 +7,8 @@ license: MIT
 
 # ai-evidence
 
+**Purpose: to see, check and learn. This skill does not accuse anyone.** It helps a person understand what a piece of content carries and how much each sign counts, so they can look further. It is never grounds to sanction, fail, dismiss or name anyone.
+
 Collect evidence about whether an image or a text came from AI, weigh each piece, and report what the evidence supports and how sure we are. The value is the **evidence table**: what was found, where, how much it counts. A single number without the table would be worth little.
 
 The scripts do everything deterministic (parse the file, combine scores, render). You do the one thing that needs judgment: look at the image, or read the text, and record what you honestly see.

@@ -6,6 +6,8 @@ A skill for [Claude Code](https://claude.com/claude-code) and other Agent Skills
 
 **Version 0.1: images and text.** Code is planned (see the [roadmap](#roadmap)).
 
+**What this is for.** Seeing, checking and learning. It does not accuse anyone. It shows what a piece of content carries, how much each sign counts and what could not be checked, so that a person can look further. A result is never grounds to sanction, fail, fire or name anyone, and a text result least of all.
+
 ## What you get
 
 Every piece of evidence has two numbers:
@@ -53,7 +55,7 @@ As a Claude Code plugin:
 - **Metadata can be forged or copied**; nothing here is proof.
 - **Pixel forensics are optional and uncalibrated** (see [pixel-signals](references/pixel-signals.md)); no invisible-watermark readers (SynthID and similar) and **C2PA signatures are not cryptographically verified**: use `c2patool` for that.
 - The weights are reasoned estimates, not fitted on a dataset. The [evaluation harness](evals/README.md) exists to fix that; it has not been run on a real labelled set yet. See [calibration](references/scoring.md#calibration).
-- Do not use a report to accuse a person of faking something.
+- Do not use a report to accuse a person of faking something. It is built to look, check and learn, not to judge people; a text result least of all.
 
 ## Roadmap
 

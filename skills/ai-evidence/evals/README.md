@@ -1,5 +1,7 @@
 # Evaluating ai-evidence
 
+> This is for checking and learning about the tool, and it does not accuse anyone. It measures how the tool agrees with labels you supply. It says nothing about any person, and it is not a way to judge anyone's work.
+
 The skill's weights are reasoned estimates. `evaluate_dataset.py` is how they get checked against images whose origin you know, and how they can be corrected. It runs the automatic layers (file evidence, and the pixel module if you ask for it) on a labelled set and reports:
 
 - the **false-positive rate on real images**, with a 95 % interval. This is the number to keep low: a real photo marked as AI is the harm the tool must avoid.
@@ -7,7 +9,7 @@ The skill's weights are reasoned estimates. `evaluate_dataset.py` is how they ge
 - how often the answer is **"not enough evidence"**, per label. A high rate is not a failure, it is the honest answer for images that carry nothing.
 - for every piece of evidence, **how often it fires on each kind of image**, a likelihood ratio, and a **suggested weight** next to the current one.
 
-**This harness covers images only.** Text has no evaluation yet, which matters: style signals on text are the ones most likely to be wrong, and they have not been measured on any real texts. The model's own visual inspection is not part of this: it needs a model in the loop, so these numbers describe the file and pixel layers only.
+It works on **images** and on **texts** (one kind per run; the kind is inferred from the file extensions, `.png .jpg .jpeg .webp .gif` or `.txt .md .text`, and a dataset must not mix both). For texts it matters most: style signals are the ones most likely to be wrong, and until this is run on real texts they have not been measured. The model's own inspection (looking at an image, reading a text) is not part of this: it needs a model in the loop, so these numbers describe the file and pixel layers only.
 
 ```bash
 python3 evals/evaluate_dataset.py ~/ai-eval-data --out-dir ~/ai-eval-out            # file evidence only, no dependencies
@@ -21,13 +23,43 @@ uv run --with pillow --with numpy python evals/evaluate_dataset.py ~/ai-eval-dat
 | `--check` | Only count images per label and source, and list gaps and duplicates. Runs nothing and writes nothing; use it while collecting |
 | `--out-dir DIR` | Required unless `--check`. Must be new or empty; writes `report.md`, `summary.json` and `results.json` (one row per image and condition) |
 | `--manifest FILE` | A CSV instead of the folder convention (below) |
-| `--pixels` | Also run the optional pixel module (needs Pillow and NumPy) |
-| `--augment strip` | Also evaluate a copy of every image re-encoded the way a messaging app does it: no metadata, longest edge 1600 px, JPEG quality 80. This shows how much the result depends on metadata, and most images you meet in practice have lost it |
+| `--modality image\|text` | Force the kind of dataset instead of inferring it |
+| `--pixels` | Also run the optional pixel module (images only; needs Pillow and NumPy) |
+| `--augment strip` | Also evaluate a cleaned copy of every file. Images are re-encoded the way a messaging app does it: no metadata, longest edge 1600 px, JPEG quality 80. Texts get the assistant residue removed (citation markers, tracking parameters, assistant phrases, placeholders). Either way it shows how much the result depends on what is easiest to lose or delete |
 | `--no-filename` | Drop the file-name evidence. Use it if your files were sorted or renamed in a way that could give the label away |
 | `--lang en\|es` | Language of the report |
 | `--max-files N` | Safety limit (default 20 000) |
 
 Everything runs locally; nothing is uploaded.
+
+## Texts
+
+```
+ai-eval-texts/
+  real/
+    native-essays/        texts you know were written by people
+    non-native-essays/    people writing in a second language (with their permission)
+    emails-and-notes/     short, informal writing
+  generated/
+    chatgpt-pasted/       as copied out of the chat, residue included
+    api-clean/            as returned by an API, with no interface residue
+  edited/
+    human-polished-by-ai/ human drafts rewritten with an assistant
+```
+
+```bash
+python3 evals/evaluate_dataset.py ~/ai-eval-texts --check
+python3 evals/evaluate_dataset.py ~/ai-eval-texts --out-dir ~/ai-eval-texts-out --augment strip
+```
+
+Beyond what the image report shows, the text report adds:
+
+- **Rows with at least medium confidence.** A text that only shows style gets "clear signs" at best with *low* confidence, because style items share one capped budget. The plain detection and false-positive rows count that as flagged; the "at least medium confidence" rows count only the firm cases. For texts, read the second pair.
+- **By text length** and **by language.** Style is not scored under 150 words or outside English and Spanish, so results differ a lot by bucket.
+- **Where each item fires on real texts, by source.** This is the fairness check. If `tx-phrase-density` or `tx-em-dash` fires far more on `non-native-essays` than on `native-essays`, that item should lose weight, whatever its likelihood ratio says.
+- **Length and topic confounds** are checked by `--check`: if generated texts are much longer than the human ones, a tool can look good just by length.
+
+The cleaned copies show how much of the detection rests on residue, which anyone can delete, and how much on style, which is the weaker and less fair part.
 
 ## Building the dataset
 
@@ -76,4 +108,4 @@ What makes the numbers worth reading:
 3. Run again and check `test`. **Once.** If you keep adjusting while looking at `test`, it stops being a test.
 4. For the next round, collect new images (or move some into a fresh `test`) before measuring again.
 
-A change is worth keeping when the false-positive rate's upper bound does not go up and the detection rate does.
+A change is worth keeping when the false-positive rate's upper bound does not go up and the detection rate does. For texts, add a second condition: the false-positive rate on second-language writers must not go up.

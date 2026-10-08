@@ -119,3 +119,15 @@ def test_plugin_manifest_matches_the_repo_marketplace_and_readme():
     entry = next(p for p in market["plugins"] if p["name"] == plugin["name"])
     assert plugin["name"] == "ai-evidence" and entry["source"] == f"./skills/{ROOT.name}"
     assert f"/plugin install ai-evidence@{market['name']}" in (ROOT / "README.md").read_text()
+
+
+def test_every_entry_point_says_the_tool_does_not_accuse():
+    for doc in ("SKILL.md", "README.md", "evals/README.md", "CONTRIBUTING.md", "../../README.md"):
+        text = (ROOT / doc).read_text(encoding="utf-8").lower()
+        assert "accuse" in text, doc
+    assert "does not accuse anyone" in SKILL
+
+
+def test_both_report_languages_carry_the_non_accusation_notice():
+    assert "no acusa a nadie" in se.UI["es"]["disclaimer"] and "para ver, comprobar y aprender" in se.UI["es"]["disclaimer"]
+    assert "does not accuse anyone" in se.UI["en"]["disclaimer"] and "seeing, checking and learning" in se.UI["en"]["disclaimer"]
