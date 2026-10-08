@@ -4,7 +4,7 @@ ai-evidence reads untrusted image files, so its own safety matters.
 
 ## What it guarantees
 
-- **No execution, no imaging library.** The image is parsed as bytes by hand-written readers with bounds checks; nothing is decoded, rendered or run.
+- **No execution.** The image is parsed as bytes by hand-written readers with bounds checks. The optional pixel module is the only code that decodes an image (with Pillow, which is a large attack surface of its own): it refuses files over 64 MB or 50 million pixels before decoding, turns decompression-bomb warnings into errors, and runs as a separate process so a failure cannot take the rest down. Keep Pillow up to date, or skip the module for images you do not trust.
 - **Bounded work.** File reads, text fields, decompression (zlib output is capped), chunk counts and EXIF entries all have limits, so crafted files cannot exhaust memory or loop.
 - **Content is data.** The skill tells the model to treat text found in the image or its metadata as data, never as instructions.
 - **Contained writes.** Scripts write only the `.json` / `.html` you name and refuse to overwrite without `--force`.

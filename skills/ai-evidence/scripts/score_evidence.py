@@ -12,7 +12,7 @@ The two claims are scored separately. The score is a weighted mean of the items,
 on top: a conclusive item decides the score, and two conclusive items that disagree make the
 result "conflict" instead of averaging them. The confidence comes from how much evidence exists.
 
-Usage: score_evidence.py evidence.json [--visual visual.json] --out report.html
+Usage: score_evidence.py evidence.json [--visual visual.json] [--pixels pixels.json] --out report.html
                          [--json-out result.json] [--lang es|en] [--force]
 """
 from __future__ import annotations
@@ -41,6 +41,10 @@ LANGUAGES = ["es", "en"]
 VISUAL_CAPS = {"known_watermark": 0.6, "anatomy_text_errors": 0.35, "physics_lighting": 0.3,
                "natural_cues": 0.3, "texture_style": 0.25, "composition": 0.2, "other": 0.2}
 
+# Pixel measurements come from heuristics that are not calibrated on real images, so whatever
+# analyze_pixels.py writes, no item counts for more than this.
+PIXEL_CAP = 0.25
+
 # (upper bound exclusive, band id)
 BANDS = [(2.0, "none"), (4.0, "low"), (6.0, "mixed"), (8.0, "strong"), (10.01, "very_strong")]
 
@@ -65,8 +69,8 @@ UI = {
         },
         "evidence": "Evidencias", "no_evidence": "No hay evidencias para esta pregunta.",
         "weight": "Peso", "share": "Cuota", "where": "Dónde", "score": "Nota",
-        "src": {"metadata": "metadatos", "structure": "estructura", "filename": "nombre", "visual": "visual"},
-        "info": "informativa (no puntúa)", "not_checked": "Qué no se ha podido comprobar", "limits": "Límites",
+        "src": {"metadata": "metadatos", "structure": "estructura", "filename": "nombre", "visual": "visual", "pixels": "píxeles"},
+        "measurements": "Medidas de píxeles", "info": "informativa (no puntúa)", "not_checked": "Qué no se ha podido comprobar", "limits": "Límites",
         "method": "Cómo se calcula",
         "method_text": "Cada evidencia tiene una nota de 0 (apunta a «no es IA») a 10 (apunta a «es IA») y un peso de 0 a 1 que dice cuánto se puede fiar de ella. "
                        "La nota final es la media ponderada por peso. Una evidencia de peso 0,9 o más decide por sí sola, y si dos de ellas se contradicen no se promedian: se marca como contradictoria. "
@@ -95,8 +99,8 @@ UI = {
         },
         "evidence": "Evidence", "no_evidence": "There is no evidence for this question.",
         "weight": "Weight", "share": "Share", "where": "Where", "score": "Score",
-        "src": {"metadata": "metadata", "structure": "structure", "filename": "file name", "visual": "visual"},
-        "info": "informative (not scored)", "not_checked": "What could not be checked", "limits": "Limits",
+        "src": {"metadata": "metadata", "structure": "structure", "filename": "file name", "visual": "visual", "pixels": "pixels"},
+        "measurements": "Pixel measurements", "info": "informative (not scored)", "not_checked": "What could not be checked", "limits": "Limits",
         "method": "How it is computed",
         "method_text": "Each piece of evidence has a score from 0 (points to \"not AI\") to 10 (points to \"AI\") and a weight from 0 to 1 saying how far it can be trusted. "
                        "The final score is the weight-weighted mean. An item with weight 0.9 or more decides on its own, and two that contradict each other are not averaged: the result is marked as conflicting. "
@@ -186,6 +190,25 @@ def load_visual(path: str) -> list[dict]:
         item["kind"] = kind
         items.append(item)
     return items
+
+
+def load_pixels(path: str) -> dict:
+    """Validate the output of analyze_pixels.py and cap every weight at PIXEL_CAP."""
+    doc = load_json(path)
+    if not isinstance(doc, dict) or doc.get("tool") != "analyze_pixels" or not isinstance(doc.get("evidence"), list):
+        fail("pixels file must be the JSON written by analyze_pixels.py")
+    items = []
+    for index, raw in enumerate(doc["evidence"]):
+        item = validate_item(raw, f"pixels[{index}]")
+        if not item["id"].startswith("px-"):
+            fail(f"pixels[{index}]: ids from the pixel module must start with 'px-'")
+        item["source"] = "pixels"
+        if item["weight"] > PIXEL_CAP:
+            item["clamped_from"] = item["weight"]
+            item["weight"] = PIXEL_CAP
+        items.append(item)
+    return {"evidence": items, "measurements": doc.get("measurements", []), "limits": doc.get("limits", []),
+            "coverage": doc.get("coverage", {})}
 
 
 def band_for(score: float) -> str:
@@ -311,6 +334,10 @@ def render(report: dict, lang: str) -> str:
     sections = "".join(f'<h2>{esc(u[c])} · {esc(u["evidence"])}</h2>'
                        f'{evidence_table(c, [e for e in report["evidence"] if e["claim"] == c], report["assessment"][c], lang)}'
                        for c in CLAIMS)
+    measured = "".join(f"<tr><td>{esc(loc(m['label'], lang))}</td><td><code>{esc(m['value'])}</code></td></tr>"
+                       for m in report.get("measurements", []))
+    measurements = (f'<h2>{esc(u["measurements"])}</h2><div class="scroll"><table><tbody>{measured}</tbody></table></div>'
+                    if measured else "")
     not_checked = "".join(f"<li>{esc(loc(x, lang))}</li>" for x in report["coverage"].get("not_checked", []))
     limits = "".join(f"<li>{esc(loc(x, lang))}</li>" for x in report["limits"])
     size = f"{f['width']}×{f['height']}" if f.get("width") else "?"
@@ -321,17 +348,27 @@ def render(report: dict, lang: str) -> str:
             f'<h1>{esc(u["title"])}</h1><p class="meta"><span>{esc(u["file"])}: <b>{esc(f["name"])}</b></span>'
             f'<span>{esc(u["format"])}: {esc(f["format"])} {esc(size)}</span>'
             f'<span>sha256: {esc(f["sha256"][:16])}…</span><span>{esc(u["generated_on"])}: {esc(report["generated_at"])}</span></p>'
-            f'<div class="cards">{cards}</div>{sections}'
+            f'<div class="cards">{cards}</div>{sections}{measurements}'
             f'<h2>{esc(u["not_checked"])}</h2><ul>{not_checked}</ul><h2>{esc(u["limits"])}</h2><ul>{limits}</ul>'
             f'<h2>{esc(u["method"])}</h2><p class="note">{esc(u["method_text"])}</p>'
             f'<p class="note" style="margin-top:16px"><b>{esc(u["disclaimer"])}</b></p></main></body></html>')
 
 
-def build_report(evidence_doc: dict, visual: list[dict]) -> dict:
+def build_report(evidence_doc: dict, visual: list[dict], pixels: dict | None = None) -> dict:
     if not isinstance(evidence_doc, dict) or not isinstance(evidence_doc.get("evidence"), list):
         fail("evidence file must be the JSON written by analyze_image.py")
     items = [validate_item(e, f"evidence[{i}]") for i, e in enumerate(evidence_doc["evidence"])]
     items += visual
+    coverage = dict(evidence_doc.get("coverage", {}))
+    limits = list(evidence_doc.get("limits", []))
+    measurements: list = []
+    if pixels is not None:
+        items += pixels["evidence"]
+        measurements = pixels["measurements"]
+        # the pixel module ran, so the "not run" notes from step 1 no longer apply
+        coverage["not_checked"] = [x for x in coverage.get("not_checked", []) if not (isinstance(x, dict) and x.get("id") == "pixels")]
+        coverage["checked"] = list(coverage.get("checked", [])) + pixels["coverage"].get("checked", [])
+        limits = [x for x in limits if not (isinstance(x, dict) and x.get("id") == "pixels")] + pixels["limits"]
     ids = [e["id"] for e in items]
     if len(ids) != len(set(ids)):
         fail("evidence ids must be unique (rename the visual observations that repeat an id)")
@@ -344,8 +381,9 @@ def build_report(evidence_doc: dict, visual: list[dict]) -> dict:
         "generated_at": datetime.date.today().isoformat(),
         "evidence": items,
         "assessment": {c: aggregate(items, c) for c in CLAIMS},
-        "coverage": evidence_doc.get("coverage", {}),
-        "limits": evidence_doc.get("limits", []),
+        "coverage": coverage,
+        "limits": limits,
+        "measurements": measurements,
     }
 
 
@@ -353,6 +391,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Combine AI-evidence items into scores and an HTML report.")
     parser.add_argument("evidence", help="evidence.json from analyze_image.py")
     parser.add_argument("--visual", help="visual.json with the model's visual observations")
+    parser.add_argument("--pixels", help="pixels.json from analyze_pixels.py (optional module)")
     parser.add_argument("--out", required=True, help="HTML report to write")
     parser.add_argument("--json-out", help="also write the combined result as JSON")
     parser.add_argument("--lang", choices=LANGUAGES, default="es")
@@ -362,7 +401,8 @@ def main() -> None:
     out = checked_output_path(args.out, ".html", args.force)
     json_out = checked_output_path(args.json_out, ".json", args.force) if args.json_out else None
     visual = load_visual(args.visual) if args.visual else []
-    report = build_report(load_json(args.evidence), visual)
+    pixels = load_pixels(args.pixels) if args.pixels else None
+    report = build_report(load_json(args.evidence), visual, pixels)
     out.write_text(render(report, args.lang), encoding="utf-8")
     if json_out:
         json_out.write_text(json.dumps(report, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")

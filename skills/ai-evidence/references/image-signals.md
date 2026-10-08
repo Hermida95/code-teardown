@@ -52,7 +52,7 @@ Can mislead: EXIF is trivially copied or forged, and an AI-edited real photo kee
 
 ## What this version does not look at
 
-- **Pixels.** Noise patterns, error level analysis, frequency artifacts, double-compression and copy-move detection need an imaging library; they are planned as an optional module.
+- **Pixels, unless the optional module ran.** Noise, periodic artifacts and error level analysis are in [pixel-signals.md](pixel-signals.md); copy-move and double-compression detection are not implemented.
 - **Invisible watermarks** such as Google's SynthID or Meta's Stable Signature: only the vendor's own detector can read them.
 - **C2PA validity**: signature chain, tampering and revocation.
 - **Containers beyond PNG, JPEG, WebP and GIF**: HEIC and AVIF get only a generic scan for XMP and C2PA bytes.

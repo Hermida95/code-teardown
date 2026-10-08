@@ -24,7 +24,7 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python-version }}
-      - name: Install test dependency (the scripts themselves need none)
-        run: python -m pip install pytest
+      - name: Install test dependencies (pillow and numpy only run ai-evidence's optional pixel tests)
+        run: python -m pip install pytest pillow numpy
       - name: Run the tests (code-teardown's Docker tests skip without a daemon)
         run: python -m pytest -q

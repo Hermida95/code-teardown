@@ -6,10 +6,10 @@ The project is small on purpose, and a few rules keep it trustworthy.
 
 1. **Evidence, not verdicts.** Nothing in the output may read as proof. New signals come with a score, a weight and a written way they can be wrong in [references/image-signals.md](references/image-signals.md).
 2. **Weights need a reason.** If you change a weight or the aggregation, update [references/scoring.md](references/scoring.md) in the same change and say what data motivated it.
-3. **Static only.** The analyzed file is read as bytes. No imaging library, no execution, no network.
-4. **Standard library only** in `scripts/` (optional modules must be opt-in and degrade cleanly). `pytest` is the only development dependency.
+3. **Static only.** The analyzed file is read as bytes; only the optional pixel module decodes it (with Pillow, under size limits). No execution, no network.
+4. **Standard library only** in `scripts/` (optional modules must be opt-in and degrade cleanly; today only `analyze_pixels.py` uses Pillow and NumPy). `pytest` is the only required development dependency; install `pillow numpy` as well to run the pixel tests, which are skipped without them.
 5. **Every fix gets a test that fails without it.** Hostile inputs (truncated files, huge chunk counts, decompression bombs) belong next to the analyzer tests.
-6. **Tests build their images in code** (`tests/builders.py`); do not commit real images.
+6. **Tests build their images in code** (`tests/builders.py`, `tests/pixel_builders.py`); do not commit real images. A pixel heuristic is only justified by what it measures on a synthetic image with a known property, and its limits go in [references/pixel-signals.md](references/pixel-signals.md).
 
 ## Workflow
 

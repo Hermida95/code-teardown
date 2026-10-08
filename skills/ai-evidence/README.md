@@ -24,9 +24,10 @@ The output is one self-contained HTML report (no external resources, dark mode, 
 
 ## How it decides
 
-1. `analyze_image.py` reads the file as bytes (PNG, JPEG, WebP, GIF; a generic scan for others) and extracts evidence from metadata, provenance manifests, file name and structure. Standard library only; the image is never opened with an imaging library or executed.
-2. The model looks at the image and records what it sees, each observation with a place in the image. These are **capped** (they can never weigh more than 0.6 and mostly far less) so a hunch cannot decide the score.
-3. `score_evidence.py` validates everything, combines it (weighted mean, with conclusive items deciding and contradicting ones flagged as a conflict) and renders the report. The formula is in [references/scoring.md](references/scoring.md).
+1. `analyze_image.py` reads the file as bytes (PNG, JPEG, WebP, GIF; a generic scan for others) and extracts evidence from metadata, provenance manifests, file name and structure. Standard library only; the image is never opened with an imaging library or executed. (The optional pixel module is the one exception, and it limits size before decoding.)
+2. Optionally, `analyze_pixels.py` measures noise, periodic upsampling artifacts and (for JPEG) error levels. It needs Pillow and NumPy, is skipped cleanly without them, and its items weigh at most 0.25.
+3. The model looks at the image and records what it sees, each observation with a place in the image. These are **capped** (they can never weigh more than 0.6 and mostly far less) so a hunch cannot decide the score.
+4. `score_evidence.py` validates everything, combines it (weighted mean, with conclusive items deciding and contradicting ones flagged as a conflict) and renders the report. The formula is in [references/scoring.md](references/scoring.md).
 
 ## Install
 
@@ -43,13 +44,13 @@ As a Claude Code plugin:
 
 - **Stripped metadata is the normal case.** Messaging apps, social networks and screenshots remove it from real and AI images alike, so many images end as "not enough evidence". That is the right answer.
 - **Metadata can be forged or copied**; nothing here is proof.
-- **No pixel forensics yet**, no invisible-watermark readers (SynthID and similar) and **C2PA signatures are not cryptographically verified**: use `c2patool` for that.
+- **Pixel forensics are optional and uncalibrated** (see [pixel-signals](references/pixel-signals.md)); no invisible-watermark readers (SynthID and similar) and **C2PA signatures are not cryptographically verified**: use `c2patool` for that.
 - The weights are reasoned estimates, not fitted on a dataset. See [calibration](references/scoring.md#calibration).
 - Do not use a report to accuse a person of faking something.
 
 ## Roadmap
 
-- [ ] Optional pixel module (error level analysis, noise and frequency statistics) behind Pillow/NumPy, off by default
+- [x] Optional pixel module (noise, periodic artifacts, error level analysis) behind Pillow/NumPy, with deliberately low weights. Next: calibrate it on a labelled set
 - [ ] **Text**: stylometric signals (sentence-length variation, stock phrases, structure) with deliberately low weights and a warning about false positives on non-native writers
 - [ ] **Code**: provenance signals (commit history shape, comment uniformity, hallucinated imports) as a companion to [code-teardown](../code-teardown)
 - [ ] A labelled evaluation set and a calibration of the weights

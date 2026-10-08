@@ -30,7 +30,7 @@ def test_skill_stays_short_and_every_link_resolves():
 
 def test_flags_in_skill_exist_in_the_scripts():
     for script, flags in {"analyze_image.py": ["--out", "--force"],
-                          "score_evidence.py": ["--visual", "--out", "--json-out", "--lang", "--force"]}.items():
+                          "score_evidence.py": ["--visual", "--pixels", "--out", "--json-out", "--lang", "--force"]}.items():
         helptext = subprocess.run([sys.executable, str(ROOT / "scripts" / script), "--help"], capture_output=True, text=True).stdout
         for flag in flags:
             assert flag in helptext, (script, flag)
@@ -58,6 +58,23 @@ def test_every_evidence_id_the_analyzer_can_emit_is_documented():
     docs = (ROOT / "references/image-signals.md").read_text(encoding="utf-8")
     missing = {i for i in ids if f"`{i}`" not in docs}
     assert not missing, missing
+
+
+def test_pixel_module_flags_and_ids_are_documented():
+    helptext = subprocess.run([sys.executable, str(ROOT / "scripts" / "analyze_pixels.py"), "--help"], capture_output=True, text=True).stdout
+    assert "--out" in helptext and "--force" in helptext
+    source = (ROOT / "scripts/analyze_pixels.py").read_text(encoding="utf-8")
+    ids = set(re.findall(r'px\("(px-[a-z-]+)"', source))
+    assert ids, "no pixel evidence ids found"
+    docs = (ROOT / "references/pixel-signals.md").read_text(encoding="utf-8")
+    assert not {i for i in ids if f"`{i}`" not in docs}
+    assert "analyze_pixels.py" in SKILL and "--pixels" in SKILL and "pixel-signals.md" in SKILL
+
+
+def test_pixel_cap_is_the_same_in_the_analyzer_and_the_scorer_and_in_the_docs():
+    source = (ROOT / "scripts/analyze_pixels.py").read_text(encoding="utf-8")
+    assert re.search(r"PIXEL_CAP = 0\.25", source) and se.PIXEL_CAP == 0.25
+    assert "capped at weight 0.25" in (ROOT / "references/pixel-signals.md").read_text(encoding="utf-8")
 
 
 def test_plugin_manifest_matches_the_repo_marketplace_and_readme():

@@ -53,6 +53,8 @@ Colour is never the only carrier: every band has a text label and the number is 
 | 0.1 | No metadata at all |
 | 0 | Informative: editing software, C2PA present without a source type, long gap between capture and last save |
 
+Pixel measurements (the optional module, see [pixel-signals.md](pixel-signals.md)) are capped at 0.25 and are uncalibrated heuristics.
+
 Visual observations are capped by kind (`known_watermark` 0.6, `anatomy_text_errors` 0.35, `physics_lighting` 0.3, `natural_cues` 0.3, `texture_style` 0.25, `composition` and `other` 0.2) and can never reach 0.9, so looking at an image cannot by itself decide the score.
 
 ## Calibration

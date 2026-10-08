@@ -634,8 +634,9 @@ def analyze(path: Path) -> dict:
     summary_exif = {k: (v if isinstance(v, (str, int, float, bool)) else str(v)[:80])
                     for k, v in exif.items() if k != "user_comment"}
     limits = [
-        T("Pixel-level analysis (noise, compression, frequency artifacts) is not part of this version.",
-          "El análisis a nivel de píxel (ruido, compresión, artefactos de frecuencia) no forma parte de esta versión."),
+        {**T("Pixel-level analysis (noise, compression, frequency artifacts) was not run; it is an optional module (analyze_pixels.py).",
+             "No se ha hecho el análisis a nivel de píxel (ruido, compresión, artefactos de frecuencia); es un módulo opcional (analyze_pixels.py)."),
+         "id": "pixels"},
         T("Invisible watermarks such as SynthID cannot be read without the vendor's own detector.",
           "Las marcas de agua invisibles como SynthID no se pueden leer sin el detector del propio proveedor."),
         T("C2PA signatures are detected but not cryptographically verified.",
@@ -661,7 +662,7 @@ def analyze(path: Path) -> dict:
                         T("generator signatures in text fields", "firmas de generadores en campos de texto"),
                         T("typical generator dimensions", "dimensiones típicas de generadores"),
                         T("file name", "nombre de archivo")],
-            "not_checked": [T("pixel-level forensics", "análisis forense a nivel de píxel"),
+            "not_checked": [{**T("pixel-level forensics (optional module)", "análisis forense a nivel de píxel (módulo opcional)"), "id": "pixels"},
                             T("invisible watermarks (SynthID and similar)", "marcas de agua invisibles (SynthID y similares)"),
                             T("C2PA signature validity", "validez de la firma C2PA"),
                             T("the image itself, by eye (done by the model, see SKILL.md step 2)",
