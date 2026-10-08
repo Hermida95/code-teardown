@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Second Opinion social preview</title>
+<style>
+  /* Source of docs/img/social-preview.png (1280x640, GitHub's recommended size).
+     Render: Chrome headless --window-size=1280,640 --screenshot=docs/img/social-preview.png docs/social-preview.html */
+  * { box-sizing: border-box; margin: 0; }
+  body {
+    width: 1280px; height: 640px; overflow: hidden; color: #e6e9ee; position: relative;
+    font: 16px/1.4 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    background: radial-gradient(1100px 600px at 85% -10%, #1d2a44 0%, #0f1318 60%);
+    display: grid; grid-template-columns: 1fr 1fr; gap: 48px; padding: 60px 64px;
+  }
+  .left { display: flex; flex-direction: column; justify-content: center; }
+  .eyebrow { color: #7ba4ff; font-weight: 700; letter-spacing: .14em; text-transform: uppercase; font-size: 14px; margin-bottom: 18px; }
+  h1 { font-size: 84px; line-height: 1; letter-spacing: -0.035em; margin-bottom: 22px; }
+  h1 span { color: #7ba4ff; }
+  .tag { font-size: 30px; line-height: 1.25; color: #c9d1dc; max-width: 520px; margin-bottom: 30px; }
+  .chips { display: flex; gap: 10px; flex-wrap: wrap; }
+  .chip { border: 1px solid #2a323d; background: #171c23; color: #9aa4b2; padding: 6px 14px; border-radius: 999px; font-size: 16px; }
+  .chip.k { color: #c9d1dc; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 15px; }
+  .right { display: flex; flex-direction: column; justify-content: center; gap: 18px; }
+  .card { background: #171c23; border: 1px solid #2a323d; border-radius: 14px; padding: 18px 20px; box-shadow: 0 10px 30px rgba(0,0,0,.35); }
+  .head { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 12px; }
+  .name { font: 600 15px ui-monospace, SFMono-Regular, Menlo, monospace; color: #7ba4ff; }
+  .q { font-size: 15px; color: #9aa4b2; }
+  .line { display: flex; align-items: center; gap: 10px; margin-top: 8px; font-size: 17px; font-weight: 600; }
+  .badge { font-size: 12.5px; font-weight: 700; padding: 2px 10px; border-radius: 999px; white-space: nowrap; min-width: 84px; text-align: center; }
+  .good { background: #12301f; color: #5fd08a; } .dep { background: #2a2146; color: #b9a4ff; } .bad { background: #3d1511; color: #ff8a80; }
+  code { margin-left: auto; background: #202731; color: #9aa4b2; padding: 2px 8px; border-radius: 6px; font: 12.5px ui-monospace, SFMono-Regular, Menlo, monospace; font-weight: 400; }
+  .score { display: flex; align-items: baseline; gap: 14px; }
+  .big { font-size: 46px; font-weight: 750; line-height: 1; color: #e6b44c; letter-spacing: -0.02em; } .big small { font-size: 18px; font-weight: 400; color: #9aa4b2; }
+  .band { background: #33290f; color: #e6b44c; font-weight: 700; font-size: 14px; padding: 3px 12px; border-radius: 999px; }
+  .conf { font-size: 13px; color: #9aa4b2; background: #202731; padding: 3px 10px; border-radius: 999px; }
+  .scale { position: relative; height: 9px; border-radius: 5px; margin: 14px 0 12px; opacity: .9;
+           background: linear-gradient(90deg,#52c98a 0 20%,#9bcb55 20% 40%,#e6b44c 40% 60%,#f08a4b 60% 80%,#f2766a 80% 100%); }
+  .scale i { position: absolute; left: 51%; top: -6px; width: 4px; height: 21px; background: #fff; border-radius: 2px; box-shadow: 0 0 0 2px #171c23; }
+  .ev { display: flex; align-items: center; gap: 10px; margin-top: 7px; font-size: 15.5px; color: #c9d1dc; }
+  .n { min-width: 30px; text-align: center; font-weight: 700; padding: 1px 6px; border-radius: 7px; font-size: 14px; }
+  .hi { background: #3d1511; color: #ff8a80; } .lo { background: #12301f; color: #5fd08a; }
+  .w { margin-left: auto; color: #6d7887; font-size: 13px; }
+  .foot { position: absolute; left: 64px; bottom: 30px; color: #6d7887; font-size: 15px; letter-spacing: .02em; }
+</style>
+</head>
+<body>
+  <div class="left">
+    <div class="eyebrow">Agent skills · Claude Code</div>
+    <h1>Second<span> </span>Opinion</h1>
+    <div class="tag">Use AI with open eyes: evidence, not verdicts.</div>
+    <div class="chips"><span class="chip k">code-teardown</span><span class="chip k">ai-evidence</span><span class="chip">nothing is executed</span></div>
+  </div>
+  <div class="right">
+    <div class="card">
+      <div class="head"><span class="name">code-teardown</span><span class="q">Is this code any good?</span></div>
+      <div class="line"><span class="badge good">✔ Good</span>Distinct, nameable roles<code>__init__.py:79</code></div>
+      <div class="line"><span class="badge dep">◆ Depends</span>An exception escapes the loop<code>__init__.py:691</code></div>
+      <div class="line"><span class="badge bad">✖ Bad</span>Error message prints a literal {}<code>__init__.py:546</code></div>
+    </div>
+    <div class="card">
+      <div class="head"><span class="name">ai-evidence</span><span class="q">Was this image made with AI?</span></div>
+      <div class="score"><span class="big">5.1<small> / 10</small></span><span class="band">Mixed signs</span><span class="conf">confidence: medium</span></div>
+      <div class="scale"><i></i></div>
+      <div class="ev"><span class="n hi">9</span>File name follows Gemini's pattern<span class="w">weight 0.50</span></div>
+      <div class="ev"><span class="n lo">1</span>Complete camera EXIF<span class="w">weight 0.50</span></div>
+      <div class="ev"><span class="n hi">8</span>Sign text that spells nothing<span class="w">weight 0.35</span></div>
+    </div>
+  </div>
+  <div class="foot">Every verdict shows its evidence, its confidence and what it could not check</div>
+</body>
+</html>

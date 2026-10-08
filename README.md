@@ -1,3 +1,5 @@
+<img src="docs/img/social-preview.png" alt="Second Opinion: use AI with open eyes. Evidence, not verdicts." width="100%">
+
 # Second Opinion
 
 **Agent Skills for using AI with open eyes.**
