@@ -60,6 +60,8 @@ Photos of people are personal data. Use your own, or ones whose subjects agreed,
 
 ## Collecting texts
 
+*En español, con plan por sesiones, temas y consentimiento para voluntarios: [GUIA-TEXTOS.es.md](GUIA-TEXTOS.es.md).*
+
 Same principle (labels you are sure of, the journeys you will meet), with different traps.
 
 | Group | Folder | First useful read |
