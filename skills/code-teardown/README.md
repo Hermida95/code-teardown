@@ -95,6 +95,8 @@ Keep the folder name `code-teardown`: the Agent Skills format expects it to matc
 
 To try it from a checkout without installing: `claude --plugin-dir ./skills/code-teardown`.
 
+Installed it before the repository was renamed? See [Upgrading](../../README.md#upgrading-from-the-old-code-teardown-repository).
+
 ## Use
 
 Just ask. The skill triggers on requests like:

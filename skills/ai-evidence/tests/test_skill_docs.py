@@ -60,7 +60,9 @@ def test_every_evidence_id_the_analyzer_can_emit_is_documented():
     assert not missing, missing
 
 
-def test_plugin_manifests_agree():
+def test_plugin_manifest_matches_the_repo_marketplace_and_readme():
     plugin = json.loads((ROOT / ".claude-plugin/plugin.json").read_text())
-    market = json.loads((ROOT / ".claude-plugin/marketplace.json").read_text())
-    assert plugin["name"] == market["plugins"][0]["name"] == "ai-evidence"
+    market = json.loads((ROOT.parent.parent / ".claude-plugin/marketplace.json").read_text())
+    entry = next(p for p in market["plugins"] if p["name"] == plugin["name"])
+    assert plugin["name"] == "ai-evidence" and entry["source"] == f"./skills/{ROOT.name}"
+    assert f"/plugin install ai-evidence@{market['name']}" in (ROOT / "README.md").read_text()

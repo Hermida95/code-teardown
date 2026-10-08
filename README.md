@@ -58,6 +58,18 @@ To try one from a checkout without installing: `claude --plugin-dir ./skills/ai-
 
 Then just ask: *"tear down ~/src/httpx"*, *"is this image AI-generated?"*, *"¿esta imagen está hecha con IA?"*. Naming the skill is the most reliable trigger.
 
+### Upgrading from the old `code-teardown` repository
+
+This repository used to hold only `code-teardown`, under that name. If you installed it before 2026-10-08, your marketplace entry still points at the old name. Remove it and add the new one:
+
+```bash
+claude plugin marketplace remove code-teardown
+claude plugin marketplace add Hermida95/second-opinion-skills
+claude plugin install code-teardown@second-opinion
+```
+
+Links to the old repository URL redirect here.
+
 ## Roadmap
 
 - **ai-evidence:** optional pixel forensics, then text and code (stylometric and provenance signals, with low weights and clear false-positive warnings), and a labelled test set to calibrate the weights.

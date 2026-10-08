@@ -4,6 +4,9 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ## [Unreleased]
 
+### Changed
+- The repository is now the Second Opinion collection (`Hermida95/second-opinion-skills`) and this skill lives in `skills/code-teardown/`. The marketplace is named `second-opinion`: run `claude plugin marketplace remove code-teardown`, then `claude plugin marketplace add Hermida95/second-opinion-skills` and `claude plugin install code-teardown@second-opinion`. The per-skill `marketplace.json` was removed; the root one lists every plugin.
+
 ### Fixed
 - The 0.1.0 note that automatic activation is unreliable was wrong: it came from a flawed measuring harness (skill-creator's `run_eval` runs from the home directory and scores API failures as "not triggered"). Measured properly the skill activates for 16/16 requests that should trigger it and 0/24 near-misses.
 

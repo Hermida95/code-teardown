@@ -122,7 +122,8 @@ def test_readme_local_links_and_images_exist():
 def test_readme_documented_commands_match_the_plugin_name():
     import json
     manifest = json.loads((ROOT / ".claude-plugin" / "plugin.json").read_text())
-    market = json.loads((ROOT / ".claude-plugin" / "marketplace.json").read_text())
+    market = json.loads((ROOT.parent.parent / ".claude-plugin" / "marketplace.json").read_text())
+    entry = next(p for p in market["plugins"] if p["name"] == manifest["name"])
     readme = (ROOT / "README.md").read_text()
-    assert manifest["name"] == market["plugins"][0]["name"] == "code-teardown"
+    assert manifest["name"] == "code-teardown" and entry["source"] == f"./skills/{ROOT.name}"
     assert f"claude plugin install {manifest['name']}@{market['name']}" in readme
