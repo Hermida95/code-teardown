@@ -157,7 +157,7 @@ def test_the_evals_docs_cover_code():
 def test_the_spanish_image_guide_only_uses_flags_that_exist_and_keeps_the_notice():
     helptext = subprocess.run([sys.executable, str(ROOT / "evals/evaluate_dataset.py"), "--help"], capture_output=True, text=True).stdout
     guide = (ROOT / "evals/GUIA-IMAGENES.es.md").read_text(encoding="utf-8")
-    for flag in set(re.findall(r"(?<![-\w])(--[a-z][a-z-]*)", guide)):
+    for flag in set(re.findall(r"(?<![-\w])(--[a-z][a-z-]*)", guide)) - {"--with"}:          # --with is uv's own flag
         assert flag in helptext, flag
     assert "No acusa a nadie" in guide and "para ver, comprobar y aprender" in guide.lower() or "Esto es para ver, comprobar y aprender" in guide
     assert "HEIC" in guide and "--check" in guide and "GUIA-IMAGENES.es.md" in (ROOT / "evals/COLLECTING.md").read_text(encoding="utf-8")
