@@ -87,6 +87,8 @@ Texts of other people are personal data. Keep the set on your machine (`evals/da
 
 ## Collecting code
 
+*En español, con plan por sesiones, ideas de proyecto y la regla del historial: [GUIA-CODIGO.es.md](GUIA-CODIGO.es.md).*
+
 The unit is a project folder, one per sample, under `<label>/<source>/`.
 
 | Group | Folder | First useful read |

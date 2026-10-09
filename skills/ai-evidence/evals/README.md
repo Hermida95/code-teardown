@@ -92,7 +92,7 @@ python3 evals/evaluate_dataset.py ~/ai-eval-code --out-dir ~/ai-eval-code-out --
 
 ## Building the dataset
 
-The step-by-step plan, with quantities and the traps to avoid, is in [COLLECTING.md](COLLECTING.md) (practical guides in Spanish with a session plan: [GUIA-IMAGENES.es.md](GUIA-IMAGENES.es.md) for images and [GUIA-TEXTOS.es.md](GUIA-TEXTOS.es.md) for texts). In short:
+The step-by-step plan, with quantities and the traps to avoid, is in [COLLECTING.md](COLLECTING.md) (practical guides in Spanish with a session plan: [GUIA-IMAGENES.es.md](GUIA-IMAGENES.es.md) for images and [GUIA-TEXTOS.es.md](GUIA-TEXTOS.es.md) for texts and [GUIA-CODIGO.es.md](GUIA-CODIGO.es.md) for code). In short:
 
 Folder convention, where the second level (optional) is the **source** and is used to break the false-positive rate down:
 

@@ -92,7 +92,7 @@ def test_evals_readme_documents_every_flag_and_its_links_resolve():
     readme = (ROOT / "evals/README.md").read_text(encoding="utf-8")
     for flag in set(re.findall(r"(--[a-z-]+)", helptext)) - {"--help"}:
         assert flag in readme, flag
-    for doc in (ROOT / "README.md", ROOT / "CONTRIBUTING.md", ROOT / "references/scoring.md", ROOT / "evals/README.md", ROOT / "evals/COLLECTING.md", ROOT / "evals/GUIA-IMAGENES.es.md", ROOT / "evals/GUIA-TEXTOS.es.md"):
+    for doc in (ROOT / "README.md", ROOT / "CONTRIBUTING.md", ROOT / "references/scoring.md", ROOT / "evals/README.md", ROOT / "evals/COLLECTING.md", ROOT / "evals/GUIA-IMAGENES.es.md", ROOT / "evals/GUIA-TEXTOS.es.md", ROOT / "evals/GUIA-CODIGO.es.md"):
         for target in re.findall(r"\]\(([^)#\s]+)(?:#[^)]*)?\)", doc.read_text(encoding="utf-8")):
             if not target.startswith(("http://", "https://")):
                 assert (doc.parent / target).exists(), (doc.name, target)
@@ -176,3 +176,21 @@ def test_the_spanish_text_guide_uses_real_flags_and_matches_the_harness():
     assert "GUIA-TEXTOS.es.md" in (ROOT / "evals/COLLECTING.md").read_text(encoding="utf-8") and "/Users/" not in guide
     for folder in re.findall(r"~/ai-eval-texts/(real|generated|edited)", guide):
         assert folder in ev.LABELS
+
+
+def test_the_spanish_code_guide_matches_the_harness_and_the_export_command():
+    sys.path.insert(0, str(ROOT / "evals"))
+    import evaluate_dataset as ev
+    helptext = subprocess.run([sys.executable, str(ROOT / "evals/evaluate_dataset.py"), "--help"], capture_output=True, text=True).stdout
+    guide = (ROOT / "evals/GUIA-CODIGO.es.md").read_text(encoding="utf-8")
+    harness_lines = [line for line in guide.splitlines() if "evaluate_dataset.py" in line]
+    flags = {flag for line in harness_lines for flag in re.findall(r"(?<![-\w])(--[a-z][a-z-]*)", line)}
+    assert flags >= {"--check", "--out-dir", "--augment"} and all(flag in helptext for flag in flags)
+    assert "No acusa a nadie" in guide and "Esto es para ver, comprobar y aprender" in guide
+    export = "--format='%x1e%H%x1f%aI%x1f%s%x1f%b%x1d'"
+    assert export in guide and "%an" not in guide and "%ae" not in guide and "nunca ejecuta git" in guide
+    assert f"{ev.ac.MIN_CODE_LINES} líneas" in guide and "--exclude='.git'" in guide and "git-log.txt" in guide
+    assert "todos los grupos" in guide and "3 veces" in guide and "/Users/" not in guide
+    for label in re.findall(r"~/ai-eval-code/(real|generated|edited)", guide):
+        assert label in ev.LABELS
+    assert "GUIA-CODIGO.es.md" in (ROOT / "evals/COLLECTING.md").read_text(encoding="utf-8")
